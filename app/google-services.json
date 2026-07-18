@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "931103012397",
+    "project_id": "auctionarena-c777d",
+    "storage_bucket": "auctionarena-c777d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:931103012397:android:573f7b9b79a1a0a5a32aa4",
+        "android_client_info": {
+          "package_name": "com.sandeep.auctionarena"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAit0wI-ncMLPsFSZ6xQrQsxA5Ef89EBt4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

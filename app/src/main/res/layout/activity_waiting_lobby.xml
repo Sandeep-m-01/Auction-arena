@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <!-- ==================================================
+         BACKGROUND
+         ================================================== -->
+
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/home"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+
+    <!-- ==================================================
+         DARK ROYAL OVERLAY
+         ================================================== -->
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#A0000000" />
+
+
+    <!-- ==================================================
+         MAIN CONTENT
+         ================================================== -->
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="24dp"
+        android:paddingEnd="24dp"
+        android:paddingTop="65dp"
+        android:paddingBottom="24dp">
+
+
+        <!-- ==================================================
+             HEADER
+             ================================================== -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WAITING LOBBY"
+            android:textColor="#FFFFFF"
+            android:textSize="44sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/bebas_neue"
+            android:letterSpacing="0.06"
+            android:gravity="center"
+            android:shadowColor="#CC000000"
+            android:shadowDx="0"
+            android:shadowDy="3"
+            android:shadowRadius="6" />
+
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WAITING FOR PLAYERS TO JOIN"
+            android:textColor="#BFFFFFFF"
+            android:textSize="15sp"
+            android:fontFamily="@font/bebas_neue"
+            android:letterSpacing="0.12"
+            android:layout_marginTop="2dp" />
+
+
+        <!-- ==================================================
+             ROOM CODE SECTION
+             ================================================== -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center"
+            android:layout_marginTop="28dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
+            android:background="@drawable/lobby_code_card"
+            android:elevation="6dp">
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ROOM CODE"
+                android:textColor="#C9A962"
+                android:textSize="15sp"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.15" />
+
+
+            <TextView
+                android:id="@+id/txtRoomCode"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="ABCD12"
+                android:textColor="#FFFFFF"
+                android:textSize="40sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.18"
+                android:layout_marginTop="2dp" />
+
+        </LinearLayout>
+
+
+        <!-- ==================================================
+             PLAYERS HEADER
+             ================================================== -->
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginTop="26dp"
+            android:paddingStart="4dp"
+            android:paddingEnd="4dp">
+
+
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="PLAYERS"
+                android:textColor="#FFFFFF"
+                android:textSize="22sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.1" />
+
+
+            <View
+                android:id="@+id/liveDot"
+                android:layout_width="9dp"
+                android:layout_height="9dp"
+                android:background="@drawable/live_dot"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:layout_constraintBottom_toBottomOf="parent" />
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="  LIVE"
+                android:textColor="#FFFF"
+                android:textSize="13sp"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.08" />
+
+        </LinearLayout>
+
+
+        <!-- ==================================================
+             PLAYER LIST
+             ================================================== -->
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/lobby_players_panel"
+            android:padding="10dp">
+
+
+            <ScrollView
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:scrollbars="none">
+
+
+                <LinearLayout
+                    android:id="@+id/playersContainer"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical">
+
+
+                    <!--
+                        This TextView is kept because your
+                        existing Java code may reference it.
+
+                        Your Firebase player list can still
+                        dynamically update this container.
+                    -->
+
+                    <TextView
+                        android:id="@+id/txtHostPlayer"
+                        android:layout_width="match_parent"
+                        android:layout_height="58dp"
+                        android:gravity="center_vertical"
+                        android:paddingStart="20dp"
+                        android:paddingEnd="20dp"
+                        android:text="HOST"
+                        android:textColor="#FFFFFF"
+                        android:textSize="20sp"
+                        android:fontFamily="@font/bebas_neue"
+                        android:letterSpacing="0.06"
+                        android:background="@drawable/menu_card" />
+
+                </LinearLayout>
+
+            </ScrollView>
+
+        </FrameLayout>
+
+
+        <!-- ==================================================
+             SHARE ROOM
+             ================================================== -->
+
+        <LinearLayout
+            android:id="@+id/btnShareRoom"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/lobby_secondary_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="5dp"
+            android:layout_marginTop="16dp">
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="SHARE ROOM"
+                android:textColor="#FFFFFF"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.1" />
+
+        </LinearLayout>
+
+
+        <!-- ==================================================
+             START AUCTION
+             ================================================== -->
+
+        <LinearLayout
+            android:id="@+id/btnStartAuction"
+            android:layout_width="match_parent"
+            android:layout_height="66dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/lobby_start_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="10dp"
+            android:layout_marginTop="12dp">
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="START AUCTION"
+                android:textColor="#111111"
+                android:textSize="28sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.1" />
+
+        </LinearLayout>
+
+    </LinearLayout>
+
+</FrameLayout>

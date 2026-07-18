@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- BACKGROUND IMAGE -->
+
+    <ImageView
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:src="@drawable/home"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+
+    <!-- DARK CINEMATIC OVERLAY -->
+
+    <View
+        android:layout_width="0dp"
+        android:layout_height="0dp"
+        android:background="#B0000000"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent" />
+
+
+    <!-- MAIN CONTENT -->
+
+    <LinearLayout
+        android:id="@+id/createContent"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="30dp"
+        android:layout_marginEnd="30dp"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent">
+
+
+        <!-- SMALL BRAND -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AUCTION ARENA"
+            android:textColor="#C9A227"
+            android:textSize="15sp"
+            android:letterSpacing="0.18"
+            android:fontFamily="@font/bebas_neue" />
+
+
+        <!-- MAIN TITLE -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="CREATE ROOM"
+            android:textColor="#FFFFFF"
+            android:textSize="54sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/bebas_neue"
+            android:gravity="center" />
+
+
+        <!-- GOLD ACCENT -->
+
+        <View
+            android:layout_width="55dp"
+            android:layout_height="2dp"
+            android:layout_marginTop="4dp"
+            android:background="#C9A227" />
+
+
+        <!-- SUBTITLE -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="CREATE YOUR PRIVATE AUCTION"
+            android:textColor="#99FFFFFF"
+            android:textSize="11sp"
+            android:letterSpacing="0.10"
+            android:fontFamily="@font/bebas_neue" />
+
+
+        <!-- SPACE -->
+
+        <Space
+            android:layout_width="match_parent"
+            android:layout_height="55dp" />
+
+
+        <!-- ROOM NAME LABEL -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginBottom="7dp"
+            android:text="ROOM NAME"
+            android:textColor="#C9A227"
+            android:textSize="12sp"
+            android:letterSpacing="0.10"
+            android:fontFamily="@font/bebas_neue" />
+
+
+        <!-- ROOM NAME INPUT -->
+
+        <EditText
+            android:id="@+id/etRoomName"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:background="@drawable/royal_input"
+            android:hint="Enter room name"
+            android:text="Auction Arena"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#77FFFFFF"
+            android:textSize="16sp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:singleLine="true" />
+
+
+        <!-- HOST NAME LABEL -->
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="4dp"
+            android:layout_marginTop="20dp"
+            android:layout_marginBottom="7dp"
+            android:text="HOST NAME"
+            android:textColor="#C9A227"
+            android:textSize="12sp"
+            android:letterSpacing="0.10"
+            android:fontFamily="@font/bebas_neue" />
+
+
+        <!-- HOST NAME INPUT -->
+
+        <EditText
+            android:id="@+id/etHostName"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:background="@drawable/royal_input"
+            android:hint="Enter your name"
+            android:textColor="#FFFFFF"
+            android:textColorHint="#77FFFFFF"
+            android:textSize="16sp"
+            android:paddingStart="20dp"
+            android:paddingEnd="20dp"
+            android:singleLine="true" />
+
+
+        <!-- CREATE BUTTON -->
+
+        <LinearLayout
+            android:id="@+id/btnCreate"
+            android:layout_width="match_parent"
+            android:layout_height="62dp"
+            android:layout_marginTop="32dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/royal_gold_button"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="8dp">
+
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="CREATE ROOM"
+                android:textColor="#080808"
+                android:textSize="23sp"
+                android:textStyle="bold"
+                android:letterSpacing="0.08"
+                android:fontFamily="@font/bebas_neue" />
+
+
+        </LinearLayout>
+
+
+        <!-- BOTTOM TEXT -->
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="THE AUCTION STARTS HERE"
+            android:textColor="#66FFFFFF"
+            android:textSize="10sp"
+            android:letterSpacing="0.12"
+            android:fontFamily="@font/bebas_neue" />
+
+
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

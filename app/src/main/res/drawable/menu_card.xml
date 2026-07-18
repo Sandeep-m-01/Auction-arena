@@ -1,37 +1,36 @@
 <?xml version="1.0" encoding="utf-8"?>
-
 <selector xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- PRESSED -->
     <item android:state_pressed="true">
-
         <shape>
-
-            <solid android:color="#22FFFFFF"/>
+            <gradient
+                android:angle="0"
+                android:startColor="#B8860B"
+                android:endColor="#FFD700" />
 
             <stroke
                 android:width="2dp"
-                android:color="#FFFFFFFF"/>
+                android:color="#FFF2A8" />
 
-            <corners android:radius="18dp"/>
-
+            <corners android:radius="16dp" />
         </shape>
-
     </item>
 
+    <!-- NORMAL -->
     <item>
-
         <shape>
-
-            <solid android:color="#66000000"/>
+            <gradient
+                android:angle="0"
+                android:startColor="#111111"
+                android:endColor="#241C08" />
 
             <stroke
                 android:width="2dp"
-                android:color="#BBFFFFFF"/>
+                android:color="#D4AF37" />
 
-            <corners android:radius="18dp"/>
-
+            <corners android:radius="16dp" />
         </shape>
-
     </item>
 
 </selector>
