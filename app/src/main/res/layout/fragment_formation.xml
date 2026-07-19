@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- BACKGROUND -->
+    <ImageView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:src="@drawable/home"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+    <!-- DARK OVERLAY -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#B5000000" />
+
+    <!-- MAIN CONTENT -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:gravity="center_horizontal"
+        android:paddingStart="18dp"
+        android:paddingEnd="18dp"
+        android:paddingTop="45dp"
+        android:paddingBottom="20dp">
+
+        <!-- SMALL TITLE -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="AUCTION ARENA"
+            android:textColor="#D4AF37"
+            android:textSize="14sp"
+            android:fontFamily="@font/bebas_neue"
+            android:letterSpacing="0.15" />
+
+        <!-- MAIN TITLE -->
+        <TextView
+            android:id="@+id/txtFormationTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="FORMATION"
+            android:textColor="#FFFFFF"
+            android:textSize="38sp"
+            android:textStyle="bold"
+            android:fontFamily="@font/bebas_neue"
+            android:letterSpacing="0.06" />
+
+        <!-- GOLD LINE -->
+        <View
+            android:layout_width="55dp"
+            android:layout_height="3dp"
+            android:layout_marginTop="3dp"
+            android:background="#D4AF37" />
+
+        <!-- TEAM INFO -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="60dp"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal">
+
+            <!-- BUDGET -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="BUDGET"
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/bebas_neue"
+                    android:letterSpacing="0.12" />
+
+                <TextView
+                    android:id="@+id/txtFormationBudget"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="$1000M"
+                    android:textColor="#D4AF37"
+                    android:textSize="23sp"
+                    android:textStyle="bold"
+                    android:fontFamily="@font/bebas_neue" />
+
+            </LinearLayout>
+
+            <!-- DIVIDER -->
+            <View
+                android:layout_width="1dp"
+                android:layout_height="35dp"
+                android:layout_gravity="center_vertical"
+                android:background="#44FFFFFF" />
+
+            <!-- PLAYER COUNT -->
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="vertical"
+                android:gravity="center">
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="ON FIELD"
+                    android:textColor="#88FFFFFF"
+                    android:textSize="11sp"
+                    android:fontFamily="@font/bebas_neue"
+                    android:letterSpacing="0.12" />
+
+                <TextView
+                    android:id="@+id/txtFormationPlayerCount"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="0 / 11"
+                    android:textColor="#FFFFFF"
+                    android:textSize="23sp"
+                    android:textStyle="bold"
+                    android:fontFamily="@font/bebas_neue" />
+
+            </LinearLayout>
+
+        </LinearLayout>
+
+        <!-- FOOTBALL FIELD -->
+        <FrameLayout
+            android:id="@+id/formationContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1"
+            android:layout_marginTop="8dp"
+            android:clipChildren="true"
+            android:clipToPadding="true">
+
+            <!-- FIELD PNG -->
+            <ImageView
+                android:id="@+id/imgFootballField"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:src="@drawable/field"
+                android:scaleType="fitXY"
+                android:contentDescription="@null" />
+
+            <!--
+                Player views will be added dynamically
+                on top of this field by FormationFragment.java.
+            -->
+
+            <!-- EMPTY MESSAGE -->
+            <TextView
+                android:id="@+id/txtEmptyFormation"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="NO PLAYERS ON FIELD"
+                android:textColor="#CCFFFFFF"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.08"
+                android:shadowColor="#FF000000"
+                android:shadowDx="0"
+                android:shadowDy="2"
+                android:shadowRadius="5" />
+
+        </FrameLayout>
+
+        <!-- ADD PLAYER -->
+        <LinearLayout
+            android:id="@+id/btnAddFormationPlayer"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginTop="12dp"
+            android:orientation="horizontal"
+            android:gravity="center"
+            android:background="@drawable/menu_card"
+            android:clickable="true"
+            android:focusable="true"
+            android:elevation="8dp">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="+  ADD PLAYER"
+                android:textColor="#FFFFFF"
+                android:textSize="23sp"
+                android:textStyle="bold"
+                android:fontFamily="@font/bebas_neue"
+                android:letterSpacing="0.08" />
+
+        </LinearLayout>
+
+        <!-- DRAG HINT -->
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="7dp"
+            android:gravity="center"
+            android:text="HOLD AND DRAG PLAYERS TO BUILD YOUR FORMATION"
+            android:textColor="#77FFFFFF"
+            android:textSize="11sp"
+            android:fontFamily="@font/bebas_neue"
+            android:letterSpacing="0.06" />
+
+    </LinearLayout>
+
+</FrameLayout>

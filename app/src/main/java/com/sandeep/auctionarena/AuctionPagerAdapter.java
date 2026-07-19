@@ -14,6 +14,11 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
     private final String playerName;
     private final boolean isHost;
 
+
+    // ==================================================
+    // CONSTRUCTOR
+    // ==================================================
+
     public AuctionPagerAdapter(
             @NonNull FragmentActivity fragmentActivity,
             String roomCode,
@@ -21,6 +26,7 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
             String playerName,
             boolean isHost
     ) {
+
         super(fragmentActivity);
 
         this.roomCode = roomCode;
@@ -29,51 +35,93 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
         this.isHost = isHost;
     }
 
+
+    // ==================================================
+    // CREATE FRAGMENT
+    // ==================================================
+
     @NonNull
     @Override
     public Fragment createFragment(int position) {
 
         Fragment fragment;
 
+
+        // ==================================================
+        // PAGE 0 - AUCTION
+        // ==================================================
+
         if (position == 0) {
 
             fragment = new AuctionFragment();
 
-        } else {
+
+            // ==================================================
+            // PAGE 1 - MY TEAM
+            // ==================================================
+
+        } else if (position == 1) {
 
             fragment = new MyTeamFragment();
+
+
+            // ==================================================
+            // PAGE 2 - FORMATION
+            // ==================================================
+
+        } else {
+
+            fragment = new FormationFragment();
         }
 
+
+        // ==================================================
+        // PASS ROOM / PLAYER DATA
+        // ==================================================
+
         Bundle bundle = new Bundle();
+
 
         bundle.putString(
                 "ROOM_CODE",
                 roomCode
         );
 
+
         bundle.putString(
                 "PLAYER_ID",
                 playerId
         );
+
 
         bundle.putString(
                 "PLAYER_NAME",
                 playerName
         );
 
+
         bundle.putBoolean(
                 "IS_HOST",
                 isHost
         );
 
-        fragment.setArguments(bundle);
+
+        fragment.setArguments(
+                bundle
+        );
+
 
         return fragment;
     }
 
+
+    // ==================================================
+    // NUMBER OF PAGES
+    // ==================================================
+
     @Override
     public int getItemCount() {
 
-        return 2;
+        return 3;
     }
 }

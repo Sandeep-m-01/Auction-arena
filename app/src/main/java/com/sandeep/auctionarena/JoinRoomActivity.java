@@ -35,7 +35,7 @@ public class JoinRoomActivity extends AppCompatActivity {
     private static final String DATABASE_URL =
             "https://auctionarena-c777d-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-    private static final long DEFAULT_BUDGET = 100;
+    private static final long DEFAULT_BUDGET = 1000;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
