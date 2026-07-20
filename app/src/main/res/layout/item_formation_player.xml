@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="68dp"
+    android:layout_height="86dp"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="2dp"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- PLAYER IMAGE -->
+
+    <ImageView
+        android:id="@+id/imgFormationPlayer"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:scaleType="centerCrop"
+        android:contentDescription="@null" />
+
+
+    <!-- PLAYER NAME -->
+
+    <TextView
+        android:id="@+id/txtFormationPlayerName"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:text="PLAYER"
+        android:textColor="#FFFFFF"
+        android:textSize="10sp"
+        android:textStyle="bold"
+        android:fontFamily="@font/bebas_neue"
+        android:shadowColor="#FF000000"
+        android:shadowDx="0"
+        android:shadowDy="1"
+        android:shadowRadius="3" />
+
+
+    <!-- CURRENT FORMATION POSITION -->
+
+    <TextView
+        android:id="@+id/txtFormationPlayerPosition"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="1dp"
+        android:paddingStart="6dp"
+        android:paddingEnd="6dp"
+        android:paddingTop="1dp"
+        android:paddingBottom="1dp"
+        android:gravity="center"
+        android:text="CM"
+        android:textColor="#111111"
+        android:textSize="9sp"
+        android:textStyle="bold"
+        android:fontFamily="@font/bebas_neue"
+        android:background="@drawable/formation_position_badge" />
+
+</LinearLayout>

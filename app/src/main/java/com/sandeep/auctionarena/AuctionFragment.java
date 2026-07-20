@@ -2,12 +2,16 @@ package com.sandeep.auctionarena;
 
 import android.media.MediaPlayer;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.animation.AlphaAnimation;
+import android.view.animation.Animation;
 import android.widget.EditText;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -31,6 +35,7 @@ import java.util.Set;
 
 public class AuctionFragment extends Fragment {
 
+
     // ==================================================
     // CONFIG
     // ==================================================
@@ -38,13 +43,17 @@ public class AuctionFragment extends Fragment {
     private static final String DATABASE_URL =
             "https://auctionarena-c777d-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-    // Money stored in millions
-    // 1000 = $1000M
     private static final long STARTING_BUDGET = 1000L;
+
+    private static final int MAX_SQUAD_SIZE = 11;
+
+    private static final String PHASE_AUCTION = "auction";
+
+    private static final String PHASE_FORMATION = "formation";
 
 
     // ==================================================
-    // ROOM / USER
+    // ROOM / PLAYER
     // ==================================================
 
     private String roomCode;
@@ -72,8 +81,8 @@ public class AuctionFragment extends Fragment {
 
     private EditText etBidAmount;
 
-    private TextView btnBid;
-    private TextView btnGiveUp;
+    private View btnBid;
+    private View btnGiveUp;
 
 
     // ==================================================
@@ -83,30 +92,12 @@ public class AuctionFragment extends Fragment {
     private DatabaseReference roomRef;
     private DatabaseReference auctionRef;
     private DatabaseReference myPlayerRef;
+    private DatabaseReference gamePhaseRef;
 
     private ValueEventListener auctionListener;
     private ValueEventListener budgetListener;
-
-
-    // ==================================================
-    // LOCAL STATE
-    // ==================================================
-
-    private long myBudget = STARTING_BUDGET;
-
-    private boolean hasGivenUp = false;
-    private boolean amIHighestBidder = false;
-
-    private boolean resultAnimationRunning = false;
-    private boolean hostCheckingWinner = false;
-
-    // Prevent host from skipping the same player twice
-    private boolean hostSkippingPlayer = false;
-
-    private String lastHandledResultId = "";
-
-    // Used to detect when a new auction player appears
-    private String lastShownPlayerId = "";
+    private ValueEventListener teamListener;
+    private ValueEventListener gamePhaseListener;
 
 
     // ==================================================
@@ -118,11 +109,35 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
+    // LOCAL STATE
+    // ==================================================
+
+    private long myBudget = STARTING_BUDGET;
+
+    private boolean hasGivenUp = false;
+    private boolean amIHighestBidder = false;
+    private boolean mySquadFull = false;
+
+    private boolean hostCheckingWinner = false;
+    private boolean hostSkippingPlayer = false;
+
+    private boolean resultAnimationRunning = false;
+
+    private boolean auctionPhaseComplete = false;
+
+    private String currentGamePhase = PHASE_AUCTION;
+
+    private String lastShownPlayerId = null;
+    private String lastHandledResultId = null;
+
+
+    // ==================================================
     // CONSTRUCTOR
     // ==================================================
 
     public AuctionFragment() {
-        // Required empty constructor
+
+        // Required empty constructor.
     }
 
 
@@ -137,39 +152,32 @@ public class AuctionFragment extends Fragment {
 
         super.onCreate(savedInstanceState);
 
+
         if (getArguments() != null) {
 
             roomCode =
-                    getArguments()
-                            .getString(
-                                    "ROOM_CODE"
-                            );
+                    getArguments().getString(
+                            "ROOM_CODE"
+                    );
+
 
             playerId =
-                    getArguments()
-                            .getString(
-                                    "PLAYER_ID"
-                            );
+                    getArguments().getString(
+                            "PLAYER_ID"
+                    );
+
 
             playerName =
-                    getArguments()
-                            .getString(
-                                    "PLAYER_NAME"
-                            );
+                    getArguments().getString(
+                            "PLAYER_NAME"
+                    );
+
 
             isHost =
-                    getArguments()
-                            .getBoolean(
-                                    "IS_HOST",
-                                    false
-                            );
-        }
-
-
-        if (playerName == null ||
-                playerName.trim().isEmpty()) {
-
-            playerName = "PLAYER";
+                    getArguments().getBoolean(
+                            "IS_HOST",
+                            false
+                    );
         }
     }
 
@@ -211,7 +219,7 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // CONNECT XML
+        // CONNECT UI
         // ==================================================
 
         playerCard =
@@ -219,55 +227,66 @@ public class AuctionFragment extends Fragment {
                         R.id.playerCard
                 );
 
+
         liveDot =
                 view.findViewById(
                         R.id.liveDot
                 );
+
 
         imgAuctionPlayer =
                 view.findViewById(
                         R.id.imgAuctionPlayer
                 );
 
+
         txtAuctionPlayerName =
                 view.findViewById(
                         R.id.txtAuctionPlayerName
                 );
+
 
         txtPlayerPosition =
                 view.findViewById(
                         R.id.txtPlayerPosition
                 );
 
+
         txtCurrentBid =
                 view.findViewById(
                         R.id.txtCurrentBid
                 );
+
 
         txtHighestBidder =
                 view.findViewById(
                         R.id.txtHighestBidder
                 );
 
+
         txtRemainingBudget =
                 view.findViewById(
                         R.id.txtRemainingBudget
                 );
+
 
         txtSoldOverlay =
                 view.findViewById(
                         R.id.txtSoldOverlay
                 );
 
+
         etBidAmount =
                 view.findViewById(
                         R.id.etBidAmount
                 );
 
+
         btnBid =
                 view.findViewById(
                         R.id.btnBid
                 );
+
 
         btnGiveUp =
                 view.findViewById(
@@ -276,71 +295,15 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // DEFAULT UI
-        // ==================================================
-
-        txtAuctionPlayerName.setText("");
-
-        txtPlayerPosition.setText("");
-
-        txtCurrentBid.setText(
-                "$0M"
-        );
-
-        txtHighestBidder.setText(
-                "NO BIDS YET"
-        );
-
-        txtRemainingBudget.setText(
-                "$1000M"
-        );
-
-        txtSoldOverlay.setVisibility(
-                View.GONE
-        );
-
-
-        // ==================================================
-        // LIVE DOT ANIMATION
-        // ==================================================
-
-        startLiveDotAnimation();
-
-
-        // ==================================================
-        // CREATE SOUNDS
-        // ==================================================
-
-        hammerSound =
-                MediaPlayer.create(
-                        requireContext(),
-                        R.raw.hammer
-                );
-
-        cardSound =
-                MediaPlayer.create(
-                        requireContext(),
-                        R.raw.card
-                );
-
-
-        // ==================================================
-        // VALIDATE ROOM
+        // VALIDATE DATA
         // ==================================================
 
         if (roomCode == null ||
-                roomCode.trim().isEmpty()) {
-
-            return;
-        }
-
-
-        // ==================================================
-        // VALIDATE PLAYER
-        // ==================================================
-
-        if (playerId == null ||
+                roomCode.trim().isEmpty() ||
+                playerId == null ||
                 playerId.trim().isEmpty()) {
+
+            disableAuctionControls();
 
             return;
         }
@@ -364,8 +327,9 @@ public class AuctionFragment extends Fragment {
 
 
         auctionRef =
-                roomRef
-                        .child("auction");
+                roomRef.child(
+                        "auction"
+                );
 
 
         myPlayerRef =
@@ -374,136 +338,86 @@ public class AuctionFragment extends Fragment {
                         .child(playerId);
 
 
+        gamePhaseRef =
+                roomRef.child(
+                        "gamePhase"
+                );
+
+
         // ==================================================
-        // PLAYER BUDGET
+        // SOUNDS
         // ==================================================
 
-        initializePlayerBudget();
+        try {
+
+            hammerSound =
+                    MediaPlayer.create(
+                            requireContext(),
+                            R.raw.hammer
+                    );
+
+        } catch (Exception ignored) {
+
+            hammerSound = null;
+        }
+
+
+        try {
+
+            cardSound =
+                    MediaPlayer.create(
+                            requireContext(),
+                            R.raw.card
+                    );
+
+        } catch (Exception ignored) {
+
+            cardSound = null;
+        }
+
+
+        // ==================================================
+        // LIVE DOT
+        // ==================================================
+
+        startLiveDotAnimation();
+
+
+        // ==================================================
+        // BUTTONS
+        // ==================================================
+
+        btnBid.setOnClickListener(v ->
+                placeBid()
+        );
+
+
+        btnGiveUp.setOnClickListener(v ->
+                giveUp()
+        );
+
+
+        // ==================================================
+        // FIREBASE LISTENERS
+        // ==================================================
+
+        listenToGamePhase();
 
         listenToMyBudget();
 
-
-        // ==================================================
-        // AUCTION LISTENER
-        // ==================================================
+        listenToMyTeam();
 
         listenToAuction();
 
 
         // ==================================================
-        // HOST INITIALIZES FIRST PLAYER
+        // HOST LOADS FIRST PLAYER
         // ==================================================
 
         if (isHost) {
 
             initializeFirstPlayer();
         }
-
-
-        // ==================================================
-        // BID BUTTON
-        // ==================================================
-
-        btnBid.setOnClickListener(v -> {
-
-            // Player already gave up
-            if (hasGivenUp) {
-
-                return;
-            }
-
-
-            // Current highest bidder cannot bid again
-            if (amIHighestBidder) {
-
-                etBidAmount.setError(
-                        "Wait for another player"
-                );
-
-                return;
-            }
-
-
-            String bidText =
-                    etBidAmount
-                            .getText()
-                            .toString()
-                            .trim();
-
-
-            // Empty bid
-            if (bidText.isEmpty()) {
-
-                etBidAmount.setError(
-                        "Enter bid amount in millions"
-                );
-
-                return;
-            }
-
-
-            long bidAmount;
-
-
-            // Convert entered text to number
-            try {
-
-                bidAmount =
-                        Long.parseLong(
-                                bidText
-                        );
-
-            } catch (NumberFormatException e) {
-
-                etBidAmount.setError(
-                        "Enter a valid amount"
-                );
-
-                return;
-            }
-
-
-            // Bid must be positive
-            if (bidAmount <= 0) {
-
-                etBidAmount.setError(
-                        "Bid must be at least $1M"
-                );
-
-                return;
-            }
-
-
-            // Cannot bid more than remaining budget
-            if (bidAmount > myBudget) {
-
-                etBidAmount.setError(
-                        "Your budget is $"
-                                + myBudget
-                                + "M"
-                );
-
-                return;
-            }
-
-
-            // Send bid to Firebase
-            placeBid(
-                    bidAmount
-            );
-
-        });
-
-
-        // ==================================================
-        // GIVE UP BUTTON
-        // ==================================================
-
-        btnGiveUp.setOnClickListener(v -> {
-
-            giveUp();
-
-        });
     }
 
 
@@ -514,44 +428,53 @@ public class AuctionFragment extends Fragment {
     private void startLiveDotAnimation() {
 
         if (liveDot == null) {
+
             return;
         }
 
-        liveDot.animate()
-                .alpha(0.15f)
-                .setDuration(500)
-                .withEndAction(() -> {
 
-                    if (liveDot == null) {
-                        return;
-                    }
+        AlphaAnimation animation =
+                new AlphaAnimation(
+                        1f,
+                        0.25f
+                );
 
-                    liveDot.animate()
-                            .alpha(1f)
-                            .setDuration(500)
-                            .withEndAction(
-                                    this::startLiveDotAnimation
-                            )
-                            .start();
 
-                })
-                .start();
+        animation.setDuration(
+                700
+        );
+
+
+        animation.setRepeatMode(
+                Animation.REVERSE
+        );
+
+
+        animation.setRepeatCount(
+                Animation.INFINITE
+        );
+
+
+        liveDot.startAnimation(
+                animation
+        );
     }
 
 
     // ==================================================
-    // INITIALIZE PLAYER BUDGET
+    // LISTEN TO GAME PHASE
     // ==================================================
 
-    private void initializePlayerBudget() {
+    private void listenToGamePhase() {
 
-        if (myPlayerRef == null) {
+        if (gamePhaseRef == null) {
+
             return;
         }
 
-        myPlayerRef
-                .child("budget")
-                .addListenerForSingleValueEvent(
+
+        gamePhaseListener =
+                gamePhaseRef.addValueEventListener(
 
                         new ValueEventListener() {
 
@@ -560,15 +483,34 @@ public class AuctionFragment extends Fragment {
                                     @NonNull DataSnapshot snapshot
                             ) {
 
-                                if (!snapshot.exists()) {
+                                String phase =
+                                        snapshot.getValue(
+                                                String.class
+                                        );
 
-                                    myPlayerRef
-                                            .child("budget")
-                                            .setValue(
-                                                    STARTING_BUDGET
-                                            );
+
+                                if (phase == null ||
+                                        phase.trim().isEmpty()) {
+
+                                    currentGamePhase =
+                                            PHASE_AUCTION;
+
+                                } else {
+
+                                    currentGamePhase =
+                                            phase;
                                 }
+
+
+                                auctionPhaseComplete =
+                                        !PHASE_AUCTION.equals(
+                                                currentGamePhase
+                                        );
+
+
+                                updateBiddingControls();
                             }
+
 
                             @Override
                             public void onCancelled(
@@ -582,13 +524,251 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
+    // LISTEN TO MY TEAM
+    // ==================================================
+
+    private void listenToMyTeam() {
+
+        if (myPlayerRef == null) {
+
+            return;
+        }
+
+
+        teamListener =
+                myPlayerRef
+                        .child("team")
+                        .addValueEventListener(
+
+                                new ValueEventListener() {
+
+                                    @Override
+                                    public void onDataChange(
+                                            @NonNull DataSnapshot snapshot
+                                    ) {
+
+                                        mySquadFull =
+                                                snapshot
+                                                        .getChildrenCount()
+                                                        >= MAX_SQUAD_SIZE;
+
+
+                                        updateBiddingControls();
+
+
+                                        if (isHost) {
+
+                                            checkIfAllSquadsComplete();
+                                        }
+                                    }
+
+
+                                    @Override
+                                    public void onCancelled(
+                                            @NonNull DatabaseError error
+                                    ) {
+
+                                    }
+                                }
+                        );
+    }
+
+
+    // ==================================================
+    // CHECK IF ALL SQUADS HAVE 11
+    // ==================================================
+
+    private void checkIfAllSquadsComplete() {
+
+        if (!isHost ||
+                roomRef == null ||
+                auctionPhaseComplete) {
+
+            return;
+        }
+
+
+        roomRef
+                .child("players")
+                .addListenerForSingleValueEvent(
+
+                        new ValueEventListener() {
+
+                            @Override
+                            public void onDataChange(
+                                    @NonNull DataSnapshot snapshot
+                            ) {
+
+                                int managerCount = 0;
+
+                                int completedManagers = 0;
+
+
+                                for (DataSnapshot managerSnapshot :
+                                        snapshot.getChildren()) {
+
+
+                                    managerCount++;
+
+
+                                    long teamSize =
+                                            managerSnapshot
+                                                    .child("team")
+                                                    .getChildrenCount();
+
+
+                                    if (teamSize >= MAX_SQUAD_SIZE) {
+
+                                        completedManagers++;
+                                    }
+                                }
+
+
+                                if (managerCount >= 2 &&
+                                        completedManagers == managerCount) {
+
+                                    moveToFormationPhase();
+                                }
+                            }
+
+
+                            @Override
+                            public void onCancelled(
+                                    @NonNull DatabaseError error
+                            ) {
+
+                            }
+                        }
+                );
+    }
+
+
+    // ==================================================
+    // MOVE TO FORMATION
+    // ==================================================
+
+    private void moveToFormationPhase() {
+
+        if (!isHost ||
+                roomRef == null ||
+                auctionPhaseComplete) {
+
+            return;
+        }
+
+
+        auctionPhaseComplete = true;
+
+
+        disableAuctionControls();
+
+
+        Map<String, Object> updates =
+                new HashMap<>();
+
+
+        updates.put(
+                "gamePhase",
+                PHASE_FORMATION
+        );
+
+
+        updates.put(
+                "auction/completed",
+                true
+        );
+
+
+        updates.put(
+                "auction/phaseComplete",
+                true
+        );
+
+
+        roomRef.updateChildren(
+                updates
+        );
+    }
+
+
+    // ==================================================
     // PLACE BID
     // ==================================================
 
-    private void placeBid(long newBid) {
+    private void placeBid() {
 
         if (auctionRef == null ||
-                playerId == null) {
+                auctionPhaseComplete ||
+                mySquadFull ||
+                hasGivenUp ||
+                amIHighestBidder) {
+
+            return;
+        }
+
+
+        String bidText =
+                etBidAmount
+                        .getText()
+                        .toString()
+                        .trim();
+
+
+        if (TextUtils.isEmpty(
+                bidText
+        )) {
+
+            Toast.makeText(
+                    requireContext(),
+                    "Enter a bid amount",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+
+        long bidAmount;
+
+
+        try {
+
+            bidAmount =
+                    Long.parseLong(
+                            bidText
+                    );
+
+        } catch (NumberFormatException exception) {
+
+            Toast.makeText(
+                    requireContext(),
+                    "Enter a valid bid",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+
+        if (bidAmount <= 0) {
+
+            Toast.makeText(
+                    requireContext(),
+                    "Bid must be greater than 0",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+            return;
+        }
+
+
+        if (bidAmount > myBudget) {
+
+            Toast.makeText(
+                    requireContext(),
+                    "Not enough budget",
+                    Toast.LENGTH_SHORT
+            ).show();
 
             return;
         }
@@ -604,77 +784,29 @@ public class AuctionFragment extends Fragment {
                             @NonNull MutableData currentData
                     ) {
 
-                        // ==========================================
-                        // CHECK IF AUCTION IS COMPLETED
-                        // ==========================================
-
                         Boolean completed =
                                 currentData
                                         .child("completed")
-                                        .getValue(
-                                                Boolean.class
-                                        );
+                                        .getValue(Boolean.class);
 
-
-                        if (Boolean.TRUE.equals(
-                                completed
-                        )) {
-
-                            return Transaction.abort();
-                        }
-
-
-                        // ==========================================
-                        // CHECK IF AUCTION IS BEING SKIPPED
-                        // ==========================================
 
                         Boolean skipped =
                                 currentData
                                         .child("skipped")
-                                        .getValue(
-                                                Boolean.class
-                                        );
+                                        .getValue(Boolean.class);
 
 
-                        if (Boolean.TRUE.equals(
-                                skipped
-                        )) {
+                        if (Boolean.TRUE.equals(completed) ||
+                                Boolean.TRUE.equals(skipped)) {
 
                             return Transaction.abort();
                         }
 
-
-                        // ==========================================
-                        // CHECK IF PLAYER GAVE UP
-                        // ==========================================
-
-                        Boolean gaveUp =
-                                currentData
-                                        .child("givenUpPlayers")
-                                        .child(playerId)
-                                        .getValue(
-                                                Boolean.class
-                                        );
-
-
-                        if (Boolean.TRUE.equals(
-                                gaveUp
-                        )) {
-
-                            return Transaction.abort();
-                        }
-
-
-                        // ==========================================
-                        // GET CURRENT BID
-                        // ==========================================
 
                         Long currentBid =
                                 currentData
                                         .child("currentBid")
-                                        .getValue(
-                                                Long.class
-                                        );
+                                        .getValue(Long.class);
 
 
                         if (currentBid == null) {
@@ -683,64 +815,31 @@ public class AuctionFragment extends Fragment {
                         }
 
 
-                        // ==========================================
-                        // GET CURRENT HIGHEST BIDDER
-                        // ==========================================
+                        if (bidAmount <= currentBid) {
 
-                        String highestBidderId =
+                            return Transaction.abort();
+                        }
+
+
+                        Boolean gaveUp =
                                 currentData
-                                        .child("highestBidderId")
-                                        .getValue(
-                                                String.class
-                                        );
+                                        .child("givenUpPlayers")
+                                        .child(playerId)
+                                        .getValue(Boolean.class);
 
 
-                        // ==========================================
-                        // HIGHEST BIDDER CANNOT BID AGAIN
-                        // ==========================================
-
-                        if (playerId.equals(
-                                highestBidderId
-                        )) {
+                        if (Boolean.TRUE.equals(gaveUp)) {
 
                             return Transaction.abort();
                         }
 
-
-                        // ==========================================
-                        // NEW BID MUST BE HIGHER
-                        // ==========================================
-
-                        if (newBid <= currentBid) {
-
-                            return Transaction.abort();
-                        }
-
-
-                        // ==========================================
-                        // BID CANNOT EXCEED BUDGET
-                        // ==========================================
-
-                        if (newBid > myBudget) {
-
-                            return Transaction.abort();
-                        }
-
-
-                        // ==========================================
-                        // UPDATE CURRENT BID
-                        // ==========================================
 
                         currentData
                                 .child("currentBid")
                                 .setValue(
-                                        newBid
+                                        bidAmount
                                 );
 
-
-                        // ==========================================
-                        // UPDATE HIGHEST BIDDER ID
-                        // ==========================================
 
                         currentData
                                 .child("highestBidderId")
@@ -749,14 +848,12 @@ public class AuctionFragment extends Fragment {
                                 );
 
 
-                        // ==========================================
-                        // UPDATE HIGHEST BIDDER NAME
-                        // ==========================================
-
                         currentData
                                 .child("highestBidderName")
                                 .setValue(
-                                        playerName
+                                        playerName != null
+                                                ? playerName
+                                                : playerId
                                 );
 
 
@@ -773,25 +870,23 @@ public class AuctionFragment extends Fragment {
                             @Nullable DataSnapshot snapshot
                     ) {
 
-                        if (!isAdded()) {
-                            return;
+                        if (!committed &&
+                                isAdded()) {
+
+                            Toast.makeText(
+                                    requireContext(),
+                                    "Bid must be higher than the current bid",
+                                    Toast.LENGTH_SHORT
+                            ).show();
                         }
 
 
-                        if (committed) {
+                        if (committed &&
+                                etBidAmount != null) {
 
-                            // Clear bid input after successful bid
-                            etBidAmount.setText("");
-
-                        } else {
-
-                            if (!hasGivenUp &&
-                                    !amIHighestBidder) {
-
-                                etBidAmount.setError(
-                                        "Bid rejected. Enter a higher valid bid."
-                                );
-                            }
+                            etBidAmount.setText(
+                                    ""
+                            );
                         }
                     }
                 }
@@ -806,22 +901,10 @@ public class AuctionFragment extends Fragment {
     private void giveUp() {
 
         if (auctionRef == null ||
-                playerId == null ||
-                hasGivenUp) {
-
-            return;
-        }
-
-
-        /*
-         * The current highest bidder cannot give up.
-         *
-         * They are currently winning the auction,
-         * so they must wait for another player
-         * to place a higher bid.
-         */
-
-        if (amIHighestBidder) {
+                auctionPhaseComplete ||
+                mySquadFull ||
+                hasGivenUp ||
+                amIHighestBidder) {
 
             return;
         }
@@ -830,15 +913,11 @@ public class AuctionFragment extends Fragment {
         auctionRef
                 .child("givenUpPlayers")
                 .child(playerId)
-                .setValue(true)
-                .addOnSuccessListener(unused -> {
-
-                    hasGivenUp = true;
-
-                    updateBiddingControls();
-
-                });
+                .setValue(
+                        true
+                );
     }
+
 
     // ==================================================
     // LISTEN TO AUCTION
@@ -847,6 +926,7 @@ public class AuctionFragment extends Fragment {
     private void listenToAuction() {
 
         if (auctionRef == null) {
+
             return;
         }
 
@@ -861,7 +941,9 @@ public class AuctionFragment extends Fragment {
                                     @NonNull DataSnapshot snapshot
                             ) {
 
-                                if (!isAdded()) {
+                                if (!isAdded() ||
+                                        auctionPhaseComplete) {
+
                                     return;
                                 }
 
@@ -870,127 +952,94 @@ public class AuctionFragment extends Fragment {
                                 // CURRENT FOOTBALLER
                                 // ==========================================
 
-                                DataSnapshot currentPlayer =
+                                DataSnapshot currentPlayerSnapshot =
                                         snapshot.child(
                                                 "currentPlayer"
                                         );
 
 
-                                Object footballerIdObject =
-                                        currentPlayer
-                                                .child("id")
-                                                .getValue();
+                                if (currentPlayerSnapshot.exists()) {
 
 
-                                String currentFootballerId =
-                                        footballerIdObject != null
-                                                ? String.valueOf(
-                                                footballerIdObject
-                                        )
-                                                : "";
+                                    Object idObject =
+                                            currentPlayerSnapshot
+                                                    .child("id")
+                                                    .getValue();
 
 
-                                String footballerName =
-                                        currentPlayer
-                                                .child("name")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                    String footballerId =
+                                            idObject != null
+                                                    ? String.valueOf(idObject)
+                                                    : "";
 
 
-                                String position =
-                                        currentPlayer
-                                                .child("position")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                    String name =
+                                            currentPlayerSnapshot
+                                                    .child("name")
+                                                    .getValue(String.class);
 
 
-                                String type =
-                                        currentPlayer
-                                                .child("type")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                    String position =
+                                            currentPlayerSnapshot
+                                                    .child("position")
+                                                    .getValue(String.class);
 
 
-                                String imageName =
-                                        currentPlayer
-                                                .child("image")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                    String image =
+                                            currentPlayerSnapshot
+                                                    .child("image")
+                                                    .getValue(String.class);
 
 
-                                // ==========================================
-                                // DETECT NEW PLAYER CARD
-                                // ==========================================
+                                    if (txtAuctionPlayerName != null) {
 
-                                if (!currentFootballerId.isEmpty() &&
-                                        !currentFootballerId.equals(
-                                                lastShownPlayerId
-                                        )) {
-
-
-                                    lastShownPlayerId =
-                                            currentFootballerId;
-
-
-                                    // Reset local state for new player
-                                    hasGivenUp =
-                                            false;
-
-                                    amIHighestBidder =
-                                            false;
-
-                                    resultAnimationRunning =
-                                            false;
-
-
-                                    // Play card sound
-                                    playCardSound();
-                                }
-
-
-                                // ==========================================
-                                // LOAD PLAYER IMAGE
-                                // ==========================================
-
-                                if (imageName != null &&
-                                        !imageName.trim().isEmpty()) {
-
-
-                                    int imageResource =
-                                            getResources()
-                                                    .getIdentifier(
-                                                            imageName,
-                                                            "drawable",
-                                                            requireContext()
-                                                                    .getPackageName()
-                                                    );
-
-
-                                    if (imageResource != 0) {
-
-                                        imgAuctionPlayer
-                                                .setImageResource(
-                                                        imageResource
-                                                );
-
-                                    } else {
-
-                                        imgAuctionPlayer
-                                                .setImageDrawable(
-                                                        null
-                                                );
+                                        txtAuctionPlayerName.setText(
+                                                name != null
+                                                        ? name
+                                                        : ""
+                                        );
                                     }
 
-                                } else {
 
-                                    imgAuctionPlayer
-                                            .setImageDrawable(
-                                                    null
-                                            );
+                                    if (txtPlayerPosition != null) {
+
+                                        txtPlayerPosition.setText(
+                                                position != null
+                                                        ? position
+                                                        : ""
+                                        );
+                                    }
+
+
+                                    loadPlayerImage(
+                                            image
+                                    );
+
+
+                                    // ======================================
+                                    // NEW FOOTBALLER
+                                    // ======================================
+
+                                    if (!footballerId.equals(
+                                            lastShownPlayerId
+                                    )) {
+
+                                        lastShownPlayerId =
+                                                footballerId;
+
+
+                                        lastHandledResultId =
+                                                null;
+
+
+                                        resultAnimationRunning =
+                                                false;
+
+
+                                        animateNewPlayerCard();
+
+                                        playCardSound();
+                                    }
                                 }
 
 
@@ -1001,14 +1050,22 @@ public class AuctionFragment extends Fragment {
                                 Long currentBid =
                                         snapshot
                                                 .child("currentBid")
-                                                .getValue(
-                                                        Long.class
-                                                );
+                                                .getValue(Long.class);
 
 
                                 if (currentBid == null) {
 
                                     currentBid = 0L;
+                                }
+
+
+                                if (txtCurrentBid != null) {
+
+                                    txtCurrentBid.setText(
+                                            "$"
+                                                    + currentBid
+                                                    + "M"
+                                    );
                                 }
 
 
@@ -1019,45 +1076,51 @@ public class AuctionFragment extends Fragment {
                                 String highestBidderId =
                                         snapshot
                                                 .child("highestBidderId")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                                .getValue(String.class);
 
 
                                 String highestBidderName =
                                         snapshot
                                                 .child("highestBidderName")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                                .getValue(String.class);
 
-
-                                // ==========================================
-                                // AM I HIGHEST BIDDER?
-                                // ==========================================
 
                                 amIHighestBidder =
+                                        playerId.equals(
+                                                highestBidderId
+                                        );
 
-                                        playerId != null
 
-                                                &&
+                                if (txtHighestBidder != null) {
 
-                                                playerId.equals(
-                                                        highestBidderId
-                                                );
+                                    if (highestBidderName == null ||
+                                            highestBidderName
+                                                    .trim()
+                                                    .isEmpty()) {
+
+                                        txtHighestBidder.setText(
+                                                "NO BIDS YET"
+                                        );
+
+                                    } else {
+
+                                        txtHighestBidder.setText(
+                                                "HIGHEST: "
+                                                        + highestBidderName
+                                        );
+                                    }
+                                }
 
 
                                 // ==========================================
-                                // DID I GIVE UP?
+                                // MY GIVE-UP STATE
                                 // ==========================================
 
                                 Boolean gaveUp =
                                         snapshot
                                                 .child("givenUpPlayers")
                                                 .child(playerId)
-                                                .getValue(
-                                                        Boolean.class
-                                                );
+                                                .getValue(Boolean.class);
 
 
                                 hasGivenUp =
@@ -1067,141 +1130,13 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==========================================
-                                // UPDATE PLAYER NAME
-                                // ==========================================
-
-                                if (footballerName != null) {
-
-                                    txtAuctionPlayerName
-                                            .setText(
-                                                    footballerName
-                                                            .toUpperCase()
-                                            );
-
-                                } else {
-
-                                    txtAuctionPlayerName
-                                            .setText("");
-                                }
-
-
-                                // ==========================================
-                                // POSITION + TYPE
-                                // ==========================================
-
-                                if (position != null) {
-
-                                    if (type != null &&
-                                            !type.isEmpty()) {
-
-                                        txtPlayerPosition
-                                                .setText(
-                                                        position.toUpperCase()
-                                                                + " • "
-                                                                + type.toUpperCase()
-                                                );
-
-                                    } else {
-
-                                        txtPlayerPosition
-                                                .setText(
-                                                        position.toUpperCase()
-                                                );
-                                    }
-
-                                } else {
-
-                                    txtPlayerPosition
-                                            .setText("");
-                                }
-
-
-                                // ==========================================
-                                // UPDATE CURRENT BID
-                                // ==========================================
-
-                                txtCurrentBid
-                                        .setText(
-                                                "$"
-                                                        + currentBid
-                                                        + "M"
-                                        );
-
-
-                                // ==========================================
-                                // UPDATE HIGHEST BIDDER TEXT
-                                // ==========================================
-
-                                if (highestBidderName == null ||
-                                        highestBidderName.isEmpty()) {
-
-                                    txtHighestBidder
-                                            .setText(
-                                                    "NO BIDS YET"
-                                            );
-
-                                } else if (amIHighestBidder) {
-
-                                    txtHighestBidder
-                                            .setText(
-                                                    "YOU ARE WINNING • WAIT"
-                                            );
-
-                                } else {
-
-                                    txtHighestBidder
-                                            .setText(
-                                                    "HIGHEST • "
-                                                            + highestBidderName
-                                                            .toUpperCase()
-                                            );
-                                }
-
-
-                                // ==========================================
-                                // CHECK SOLD / COMPLETED
-                                // ==========================================
-
-                                Boolean completed =
-                                        snapshot
-                                                .child("completed")
-                                                .getValue(
-                                                        Boolean.class
-                                                );
-
-
-                                if (Boolean.TRUE.equals(
-                                        completed
-                                )) {
-
-                                    handleCompletedAuction(
-                                            snapshot.child(
-                                                    "result"
-                                            )
-                                    );
-
-                                    return;
-                                }
-
-
-                                // ==========================================
-                                // CHECK SKIPPED PLAYER
+                                // SKIPPED
                                 // ==========================================
 
                                 Boolean skipped =
                                         snapshot
                                                 .child("skipped")
-                                                .getValue(
-                                                        Boolean.class
-                                                );
-
-
-                                String skipId =
-                                        snapshot
-                                                .child("skipId")
-                                                .getValue(
-                                                        String.class
-                                                );
+                                                .getValue(Boolean.class);
 
 
                                 if (Boolean.TRUE.equals(
@@ -1209,7 +1144,7 @@ public class AuctionFragment extends Fragment {
                                 )) {
 
                                     handleSkippedAuction(
-                                            skipId
+                                            snapshot
                                     );
 
                                     return;
@@ -1217,20 +1152,41 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==========================================
-                                // UPDATE BID / GIVE UP BUTTONS
+                                // SOLD
+                                // ==========================================
+
+                                Boolean completed =
+                                        snapshot
+                                                .child("completed")
+                                                .getValue(Boolean.class);
+
+
+                                if (Boolean.TRUE.equals(
+                                        completed
+                                )) {
+
+                                    handleCompletedAuction(
+
+                                            snapshot.child(
+                                                    "result"
+                                            )
+
+                                    );
+
+                                    return;
+                                }
+
+
+                                // ==========================================
+                                // ACTIVE AUCTION
                                 // ==========================================
 
                                 updateBiddingControls();
 
 
-                                // ==========================================
-                                // ONLY HOST DECIDES WINNER OR SKIP
-                                // ==========================================
-
                                 if (isHost) {
 
                                     checkForAuctionWinner();
-
                                 }
                             }
 
@@ -1247,19 +1203,123 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
+    // LOAD PLAYER IMAGE
+    // ==================================================
+
+    private void loadPlayerImage(
+            String imageName
+    ) {
+
+        if (!isAdded() ||
+                imgAuctionPlayer == null) {
+
+            return;
+        }
+
+
+        if (imageName == null ||
+                imageName.trim().isEmpty()) {
+
+            imgAuctionPlayer.setImageDrawable(
+                    null
+            );
+
+            return;
+        }
+
+
+        int imageResource =
+                getResources()
+                        .getIdentifier(
+                                imageName,
+                                "drawable",
+                                requireContext()
+                                        .getPackageName()
+                        );
+
+
+        if (imageResource != 0) {
+
+            imgAuctionPlayer.setImageResource(
+                    imageResource
+            );
+
+        } else {
+
+            imgAuctionPlayer.setImageDrawable(
+                    null
+            );
+        }
+    }
+
+
+    // ==================================================
+    // NEW PLAYER ANIMATION
+    // ==================================================
+
+    private void animateNewPlayerCard() {
+
+        if (playerCard == null) {
+
+            return;
+        }
+
+
+        playerCard
+                .animate()
+                .cancel();
+
+
+        playerCard.setTranslationX(
+                -(playerCard.getWidth()
+                        + 500f)
+        );
+
+
+        playerCard.setAlpha(
+                0f
+        );
+
+
+        playerCard
+                .animate()
+                .translationX(
+                        0f
+                )
+                .alpha(
+                        1f
+                )
+                .setDuration(
+                        700
+                )
+                .start();
+    }
+
+
+    // ==================================================
     // PLAY CARD SOUND
     // ==================================================
 
     private void playCardSound() {
 
         if (cardSound == null) {
+
             return;
         }
 
 
         try {
 
-            cardSound.seekTo(0);
+            if (cardSound.isPlaying()) {
+
+                cardSound.pause();
+            }
+
+
+            cardSound.seekTo(
+                    0
+            );
+
 
             cardSound.start();
 
@@ -1268,8 +1328,21 @@ public class AuctionFragment extends Fragment {
         }
     }
 
+
     // ==================================================
-    // CHECK FOR AUCTION WINNER / SKIP
+    // CHECK FOR WINNER / SKIP
+    //
+    // FIXED GIVE-UP LOGIC:
+    //
+    // A bids + B gives up
+    // -> A wins
+    //
+    // A gives up + B has not bid
+    // -> WAIT for B
+    // -> DO NOT SKIP
+    //
+    // A and B both give up with no valid bid
+    // -> SKIP
     // ==================================================
 
     private void checkForAuctionWinner() {
@@ -1277,6 +1350,7 @@ public class AuctionFragment extends Fragment {
         if (!isHost ||
                 roomRef == null ||
                 auctionRef == null ||
+                auctionPhaseComplete ||
                 hostCheckingWinner ||
                 hostSkippingPlayer) {
 
@@ -1299,8 +1373,7 @@ public class AuctionFragment extends Fragment {
                         hostCheckingWinner = false;
 
 
-                        // Fragment is no longer active
-                        if (!isAdded()) {
+                        if (auctionPhaseComplete) {
 
                             return;
                         }
@@ -1312,16 +1385,10 @@ public class AuctionFragment extends Fragment {
                                 );
 
 
-                        // ==========================================
-                        // ALREADY COMPLETED?
-                        // ==========================================
-
                         Boolean completed =
                                 auctionSnapshot
                                         .child("completed")
-                                        .getValue(
-                                                Boolean.class
-                                        );
+                                        .getValue(Boolean.class);
 
 
                         if (Boolean.TRUE.equals(
@@ -1332,16 +1399,10 @@ public class AuctionFragment extends Fragment {
                         }
 
 
-                        // ==========================================
-                        // ALREADY SKIPPING?
-                        // ==========================================
-
                         Boolean skipped =
                                 auctionSnapshot
                                         .child("skipped")
-                                        .getValue(
-                                                Boolean.class
-                                        );
+                                        .getValue(Boolean.class);
 
 
                         if (Boolean.TRUE.equals(
@@ -1352,36 +1413,34 @@ public class AuctionFragment extends Fragment {
                         }
 
 
-                        // ==========================================
-                        // CURRENT HIGHEST BIDDER
-                        // ==========================================
+                        DataSnapshot currentPlayerSnapshot =
+                                auctionSnapshot.child(
+                                        "currentPlayer"
+                                );
+
+
+                        if (!currentPlayerSnapshot.exists()) {
+
+                            return;
+                        }
+
 
                         String highestBidderId =
                                 auctionSnapshot
                                         .child("highestBidderId")
-                                        .getValue(
-                                                String.class
-                                        );
+                                        .getValue(String.class);
 
 
                         String highestBidderName =
                                 auctionSnapshot
                                         .child("highestBidderName")
-                                        .getValue(
-                                                String.class
-                                        );
+                                        .getValue(String.class);
 
-
-                        // ==========================================
-                        // CURRENT BID
-                        // ==========================================
 
                         Long currentBid =
                                 auctionSnapshot
                                         .child("currentBid")
-                                        .getValue(
-                                                Long.class
-                                        );
+                                        .getValue(Long.class);
 
 
                         if (currentBid == null) {
@@ -1390,27 +1449,18 @@ public class AuctionFragment extends Fragment {
                         }
 
 
-                        // ==========================================
-                        // GET ALL ROOM PLAYERS
-                        // ==========================================
-
                         DataSnapshot playersSnapshot =
                                 roomSnapshot.child(
                                         "players"
                                 );
 
 
-                        int totalPlayers = 0;
+                        int eligibleManagers = 0;
 
-                        int activePlayers = 0;
+                        int activeManagers = 0;
 
-                        String remainingPlayerId =
-                                null;
+                        String remainingManagerId = null;
 
-
-                        // ==========================================
-                        // COUNT ACTIVE PLAYERS
-                        // ==========================================
 
                         for (DataSnapshot participant :
                                 playersSnapshot.getChildren()) {
@@ -1426,105 +1476,157 @@ public class AuctionFragment extends Fragment {
                             }
 
 
-                            totalPlayers++;
+                            long teamSize =
+                                    participant
+                                            .child("team")
+                                            .getChildrenCount();
+
+
+                            // Manager already has full squad.
+                            if (teamSize >= MAX_SQUAD_SIZE) {
+
+                                continue;
+                            }
+
+
+                            eligibleManagers++;
 
 
                             Boolean participantGaveUp =
                                     auctionSnapshot
                                             .child("givenUpPlayers")
                                             .child(id)
-                                            .getValue(
-                                                    Boolean.class
-                                            );
+                                            .getValue(Boolean.class);
 
 
-                            // Player is still active
                             if (!Boolean.TRUE.equals(
                                     participantGaveUp
                             )) {
 
-                                activePlayers++;
+                                activeManagers++;
 
-                                remainingPlayerId =
+                                remainingManagerId =
                                         id;
                             }
                         }
 
 
-                        // ==========================================
-                        // NEED AT LEAST 2 PLAYERS
-                        // ==========================================
+                        // ==================================================
+                        // EVERYONE HAS 11
+                        // ==================================================
 
-                        if (totalPlayers < 2) {
+                        if (eligibleManagers == 0) {
 
-                            return;
-                        }
-
-
-                        // ==========================================
-                        // EVERYONE GAVE UP
-                        // ==========================================
-
-                        /*
-                         * Example:
-                         *
-                         * Player A -> GIVE UP
-                         * Player B -> GIVE UP
-                         *
-                         * activePlayers = 0
-                         *
-                         * No one wins the footballer.
-                         * The footballer is skipped.
-                         */
-
-                        if (activePlayers == 0) {
-
-                            skipCurrentPlayer();
+                            moveToFormationPhase();
 
                             return;
                         }
 
 
-                        // ==========================================
-                        // NO BID YET
-                        // ==========================================
+                        // ==================================================
+                        // TWO OR MORE ACTIVE MANAGERS
+                        //
+                        // Keep bidding.
+                        // ==================================================
 
-                        /*
-                         * If players are still active but nobody
-                         * has placed a bid, there is no winner yet.
-                         */
-
-                        if (highestBidderId == null ||
-                                currentBid <= 0) {
+                        if (activeManagers > 1) {
 
                             return;
                         }
 
 
-                        // ==========================================
-                        // ONE ACTIVE PLAYER REMAINS
-                        // ==========================================
+                        // ==================================================
+                        // EXACTLY ONE ACTIVE MANAGER
+                        // ==================================================
 
-                        /*
-                         * If only one active player remains,
-                         * they win only if they are also the
-                         * current highest bidder.
-                         */
-
-                        if (activePlayers == 1 &&
-                                remainingPlayerId != null &&
-                                remainingPlayerId.equals(
-                                        highestBidderId
-                                )) {
+                        if (activeManagers == 1) {
 
 
-                            finishAuction(
-                                    highestBidderId,
-                                    highestBidderName,
-                                    currentBid,
+                            // If remaining manager is highest bidder,
+                            // they win immediately.
+
+                            if (highestBidderId != null &&
+                                    highestBidderId.equals(
+                                            remainingManagerId
+                                    ) &&
+                                    currentBid > 0) {
+
+
+                                finishAuction(
+                                        highestBidderId,
+                                        highestBidderName,
+                                        currentBid,
+                                        auctionSnapshot
+                                );
+                            }
+
+
+                            // IMPORTANT:
+                            //
+                            // If remaining manager has NOT bid yet,
+                            // do nothing.
+                            //
+                            // This fixes the bug where one GIVE UP
+                            // immediately skipped the footballer.
+
+                            return;
+                        }
+
+
+                        // ==================================================
+                        // ZERO ACTIVE MANAGERS
+                        // ==================================================
+
+                        if (activeManagers == 0) {
+
+
+                            // If there is still a valid highest bid,
+                            // award the footballer to that bidder.
+
+                            if (highestBidderId != null &&
+                                    currentBid > 0) {
+
+
+                                DataSnapshot highestBidderSnapshot =
+                                        playersSnapshot.child(
+                                                highestBidderId
+                                        );
+
+
+                                if (highestBidderSnapshot.exists()) {
+
+
+                                    long teamSize =
+                                            highestBidderSnapshot
+                                                    .child("team")
+                                                    .getChildrenCount();
+
+
+                                    if (teamSize <
+                                            MAX_SQUAD_SIZE) {
+
+
+                                        finishAuction(
+                                                highestBidderId,
+                                                highestBidderName,
+                                                currentBid,
+                                                auctionSnapshot
+                                        );
+
+
+                                        return;
+                                    }
+                                }
+                            }
+
+
+                            // Nobody has a valid bid.
+                            // Everyone gave up.
+                            // Skip footballer.
+
+                            skipCurrentPlayer(
                                     auctionSnapshot
                             );
-
                         }
                     }
 
@@ -1536,35 +1638,65 @@ public class AuctionFragment extends Fragment {
 
                         hostCheckingWinner =
                                 false;
-
                     }
                 }
         );
     }
 
-
     // ==================================================
     // SKIP CURRENT PLAYER
     // ==================================================
 
-    private void skipCurrentPlayer() {
+    private void skipCurrentPlayer(
+            DataSnapshot auctionSnapshot
+    ) {
 
         if (!isHost ||
                 auctionRef == null ||
-                hostSkippingPlayer) {
+                hostSkippingPlayer ||
+                auctionPhaseComplete) {
 
             return;
         }
 
 
-        // Prevent duplicate skip calls
+        DataSnapshot footballerSnapshot =
+                auctionSnapshot.child(
+                        "currentPlayer"
+                );
+
+
+        if (!footballerSnapshot.exists()) {
+
+            return;
+        }
+
+
+        Object footballerIdObject =
+                footballerSnapshot
+                        .child("id")
+                        .getValue();
+
+
+        if (footballerIdObject == null) {
+
+            return;
+        }
+
+
+        String footballerId =
+                String.valueOf(
+                        footballerIdObject
+                );
+
+
         hostSkippingPlayer =
                 true;
 
 
-        // Unique ID for this skip event
         String skipId =
-                "skip_"
+                footballerId
+                        + "_"
                         + System.currentTimeMillis();
 
 
@@ -1588,9 +1720,8 @@ public class AuctionFragment extends Fragment {
                 .updateChildren(
                         updates
                 )
-                .addOnFailureListener(e -> {
+                .addOnFailureListener(error -> {
 
-                    // Allow retry if Firebase update fails
                     hostSkippingPlayer =
                             false;
 
@@ -1603,19 +1734,36 @@ public class AuctionFragment extends Fragment {
     // ==================================================
 
     private void handleSkippedAuction(
-            String skipId
+            DataSnapshot auctionSnapshot
     ) {
 
-        if (skipId == null ||
-                skipId.trim().isEmpty()) {
+        if (auctionPhaseComplete) {
 
             return;
         }
 
 
-        // Prevent the same skip animation
-        // from running multiple times
-        if (skipId.equals(
+        String skipId =
+                auctionSnapshot
+                        .child("skipId")
+                        .getValue(
+                                String.class
+                        );
+
+
+        if (skipId == null) {
+
+            return;
+        }
+
+
+        String handledSkipId =
+                "SKIP_"
+                        + skipId;
+
+
+        // Prevent same skip being handled repeatedly.
+        if (handledSkipId.equals(
                 lastHandledResultId
         )) {
 
@@ -1624,166 +1772,57 @@ public class AuctionFragment extends Fragment {
 
 
         lastHandledResultId =
-                skipId;
+                handledSkipId;
 
 
-        // ==========================================
-        // DISABLE INPUT
-        // ==========================================
+        disableAuctionControls();
 
-        if (etBidAmount != null) {
-
-            etBidAmount.setEnabled(
-                    false
-            );
-        }
-
-
-        if (btnBid != null) {
-
-            btnBid.setEnabled(
-                    false
-            );
-
-            btnBid.setAlpha(
-                    0.4f
-            );
-        }
-
-
-        if (btnGiveUp != null) {
-
-            btnGiveUp.setEnabled(
-                    false
-            );
-
-            btnGiveUp.setAlpha(
-                    0.4f
-            );
-        }
-
-
-        // ==========================================
-        // SHOW SKIPPED STATUS
-        // ==========================================
 
         if (txtHighestBidder != null) {
 
             txtHighestBidder.setText(
-                    "PLAYER SKIPPED"
+                    "NO SALE"
             );
         }
 
 
-        // ==========================================
-        // WAIT THEN ANIMATE CARD
-        // ==========================================
+        // ==================================================
+        // HOST LOADS NEXT PLAYER
+        //
+        // The next player is loaded from Firebase.
+        // This is not dependent on an animation finishing.
+        // ==================================================
 
-        if (playerCard != null) {
+        if (isHost &&
+                playerCard != null) {
+
 
             playerCard.postDelayed(
-                    this::animateSkippedPlayer,
-                    700
+
+                    () -> {
+
+                        if (!auctionPhaseComplete &&
+                                isAdded()) {
+
+                            loadNextPlayer();
+                        }
+
+                    },
+
+                    1000
             );
+
+
+        } else if (isHost) {
+
+
+            loadNextPlayer();
         }
     }
 
 
     // ==================================================
-    // ANIMATE SKIPPED PLAYER
-    // ==================================================
-
-    private void animateSkippedPlayer() {
-
-        if (playerCard == null ||
-                resultAnimationRunning) {
-
-            return;
-        }
-
-
-        resultAnimationRunning =
-                true;
-
-
-        // ==========================================
-        // OLD CARD MOVES RIGHT
-        // ==========================================
-
-        playerCard
-                .animate()
-                .translationX(
-                        playerCard.getWidth()
-                                + 500f
-                )
-                .alpha(0f)
-                .setDuration(600)
-                .withEndAction(() -> {
-
-
-                    // ==========================================
-                    // HOST LOADS NEXT PLAYER
-                    // ==========================================
-
-                    if (isHost) {
-
-                        loadNextPlayer();
-                    }
-
-
-                    if (playerCard == null) {
-
-                        resultAnimationRunning =
-                                false;
-
-                        return;
-                    }
-
-
-                    // ==========================================
-                    // PLACE CARD OUTSIDE LEFT
-                    // ==========================================
-
-                    playerCard.setTranslationX(
-                            -playerCard.getWidth()
-                                    - 500f
-                    );
-
-
-                    playerCard.setAlpha(
-                            0f
-                    );
-
-
-                    // ==========================================
-                    // NEW CARD ENTERS FROM LEFT
-                    // ==========================================
-
-                    playerCard
-                            .animate()
-                            .translationX(
-                                    0f
-                            )
-                            .alpha(
-                                    1f
-                            )
-                            .setDuration(
-                                    700
-                            )
-                            .withEndAction(() -> {
-
-                                resultAnimationRunning =
-                                        false;
-
-                            })
-                            .start();
-
-                })
-                .start();
-    }
-
-    // ==================================================
-    // FINISH AUCTION
+    // FINISH CURRENT AUCTION
     // ==================================================
 
     private void finishAuction(
@@ -1794,15 +1833,13 @@ public class AuctionFragment extends Fragment {
     ) {
 
         if (!isHost ||
-                roomRef == null) {
+                roomRef == null ||
+                auctionRef == null ||
+                auctionPhaseComplete) {
 
             return;
         }
 
-
-        // ==========================================
-        // GET CURRENT FOOTBALLER
-        // ==========================================
 
         DataSnapshot footballerSnapshot =
                 auctionSnapshot.child(
@@ -1815,10 +1852,6 @@ public class AuctionFragment extends Fragment {
             return;
         }
 
-
-        // ==========================================
-        // FOOTBALLER ID
-        // ==========================================
 
         Object footballerIdObject =
                 footballerSnapshot
@@ -1838,10 +1871,6 @@ public class AuctionFragment extends Fragment {
                 );
 
 
-        // ==========================================
-        // FOOTBALLER NAME
-        // ==========================================
-
         String footballerName =
                 footballerSnapshot
                         .child("name")
@@ -1849,10 +1878,6 @@ public class AuctionFragment extends Fragment {
                                 String.class
                         );
 
-
-        // ==========================================
-        // POSITION
-        // ==========================================
 
         String position =
                 footballerSnapshot
@@ -1862,10 +1887,6 @@ public class AuctionFragment extends Fragment {
                         );
 
 
-        // ==========================================
-        // TYPE
-        // ==========================================
-
         String type =
                 footballerSnapshot
                         .child("type")
@@ -1873,10 +1894,6 @@ public class AuctionFragment extends Fragment {
                                 String.class
                         );
 
-
-        // ==========================================
-        // IMAGE
-        // ==========================================
 
         String image =
                 footballerSnapshot
@@ -1886,19 +1903,18 @@ public class AuctionFragment extends Fragment {
                         );
 
 
-        // ==========================================
+        // ==================================================
         // UNIQUE RESULT ID
-        // ==========================================
+        //
+        // Used by both phones to make sure the SOLD result
+        // is only shown once.
+        // ==================================================
 
         String resultId =
                 footballerId
                         + "_"
                         + System.currentTimeMillis();
 
-
-        // ==================================================
-        // CREATE RESULT DATA
-        // ==================================================
 
         Map<String, Object> result =
                 new HashMap<>();
@@ -1918,7 +1934,9 @@ public class AuctionFragment extends Fragment {
 
         result.put(
                 "winnerName",
-                winnerName
+                winnerName != null
+                        ? winnerName
+                        : winnerId
         );
 
 
@@ -1959,7 +1977,7 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // COMPLETE AUCTION
+        // MARK CURRENT AUCTION COMPLETED
         // ==================================================
 
         Map<String, Object> updates =
@@ -1985,9 +2003,9 @@ public class AuctionFragment extends Fragment {
                 .addOnSuccessListener(unused -> {
 
 
-                    // ==========================================
-                    // DEDUCT WINNER'S BUDGET
-                    // ==========================================
+                    // ======================================
+                    // DEDUCT WINNING BID
+                    // ======================================
 
                     deductWinnerBudget(
                             winnerId,
@@ -1995,9 +2013,9 @@ public class AuctionFragment extends Fragment {
                     );
 
 
-                    // ==========================================
-                    // ADD FOOTBALLER TO WINNER'S TEAM
-                    // ==========================================
+                    // ======================================
+                    // ADD PLAYER TO WINNER'S TEAM
+                    // ======================================
 
                     addFootballerToWinnerTeam(
                             winnerId,
@@ -2058,10 +2076,6 @@ public class AuctionFragment extends Fragment {
                         }
 
 
-                        // ==========================================
-                        // CALCULATE NEW BUDGET
-                        // ==========================================
-
                         long newBudget =
                                 Math.max(
                                         0,
@@ -2113,10 +2127,6 @@ public class AuctionFragment extends Fragment {
         }
 
 
-        // ==========================================
-        // CREATE PLAYER DATA
-        // ==========================================
-
         Map<String, Object> playerData =
                 new HashMap<>();
 
@@ -2157,24 +2167,8 @@ public class AuctionFragment extends Fragment {
         );
 
 
-        // ==========================================
-        // SAVE TO WINNER TEAM
-        // ==========================================
-
-        /*
-         * Firebase:
-         *
-         * rooms
-         *   ROOM_CODE
-         *     players
-         *       WINNER_ID
-         *         team
-         *           FOOTBALLER_ID
-         *
-         * Using footballerId as the key also prevents
-         * the same footballer from being added twice
-         * to the same player's team.
-         */
+        // Using footballerId as the Firebase key prevents
+        // the same footballer from being added twice.
 
         roomRef
                 .child("players")
@@ -2185,13 +2179,18 @@ public class AuctionFragment extends Fragment {
                         playerData
                 );
     }
+
+
     // ==================================================
     // INITIALIZE FIRST PLAYER
     // ==================================================
 
     private void initializeFirstPlayer() {
 
-        if (auctionRef == null) {
+        if (!isHost ||
+                auctionRef == null ||
+                auctionPhaseComplete) {
+
             return;
         }
 
@@ -2207,9 +2206,9 @@ public class AuctionFragment extends Fragment {
                                     @NonNull DataSnapshot snapshot
                             ) {
 
-                                // If a player already exists,
-                                // do not create another one.
-                                if (snapshot.exists()) {
+                                if (auctionPhaseComplete ||
+                                        snapshot.exists()) {
+
                                     return;
                                 }
 
@@ -2230,7 +2229,7 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
-    // LOAD NEXT PLAYER - NO REPEATED PLAYERS
+    // LOAD NEXT PLAYER
     // ==================================================
 
     private void loadNextPlayer() {
@@ -2238,14 +2237,132 @@ public class AuctionFragment extends Fragment {
         if (!isHost ||
                 roomRef == null ||
                 auctionRef == null ||
+                auctionPhaseComplete ||
                 !isAdded()) {
+
+            hostSkippingPlayer =
+                    false;
 
             return;
         }
 
 
         // ==================================================
-        // LOAD ALL PLAYERS FROM LOCAL JSON
+        // CHECK IF EVERY MANAGER ALREADY HAS 11
+        // ==================================================
+
+        roomRef
+                .child("players")
+                .addListenerForSingleValueEvent(
+
+                        new ValueEventListener() {
+
+                            @Override
+                            public void onDataChange(
+                                    @NonNull DataSnapshot playersSnapshot
+                            ) {
+
+                                if (!isAdded() ||
+                                        auctionPhaseComplete) {
+
+                                    hostSkippingPlayer =
+                                            false;
+
+                                    return;
+                                }
+
+
+                                int managerCount =
+                                        0;
+
+
+                                int completedManagers =
+                                        0;
+
+
+                                for (DataSnapshot manager :
+                                        playersSnapshot.getChildren()) {
+
+
+                                    managerCount++;
+
+
+                                    long teamSize =
+                                            manager
+                                                    .child("team")
+                                                    .getChildrenCount();
+
+
+                                    if (teamSize >=
+                                            MAX_SQUAD_SIZE) {
+
+                                        completedManagers++;
+                                    }
+                                }
+
+
+                                // ==========================================
+                                // ALL MANAGERS HAVE 11
+                                // ==========================================
+
+                                if (managerCount >= 2 &&
+                                        completedManagers ==
+                                                managerCount) {
+
+
+                                    hostSkippingPlayer =
+                                            false;
+
+
+                                    moveToFormationPhase();
+
+
+                                    return;
+                                }
+
+
+                                // ==========================================
+                                // LOAD AN UNUSED FOOTBALLER
+                                // ==========================================
+
+                                selectNextUnusedPlayer();
+                            }
+
+
+                            @Override
+                            public void onCancelled(
+                                    @NonNull DatabaseError error
+                            ) {
+
+                                hostSkippingPlayer =
+                                        false;
+                            }
+                        }
+                );
+    }
+
+
+    // ==================================================
+    // SELECT NEXT UNUSED PLAYER
+    // ==================================================
+
+    private void selectNextUnusedPlayer() {
+
+        if (!isHost ||
+                roomRef == null ||
+                auctionRef == null ||
+                auctionPhaseComplete ||
+                !isAdded()) {
+
+            hostSkippingPlayer =
+                    false;
+
+            return;
+        }
+
+
+        // ==================================================
+        // LOAD ALL PLAYERS FROM YOUR LOCAL PLAYER LOADER
         // ==================================================
 
         List<Player> allPlayers =
@@ -2257,14 +2374,15 @@ public class AuctionFragment extends Fragment {
         if (allPlayers == null ||
                 allPlayers.isEmpty()) {
 
-            hostSkippingPlayer = false;
+            hostSkippingPlayer =
+                    false;
 
             return;
         }
 
 
         // ==================================================
-        // READ USED PLAYERS FROM FIREBASE
+        // GET USED PLAYER IDS
         // ==================================================
 
         roomRef
@@ -2280,51 +2398,50 @@ public class AuctionFragment extends Fragment {
 
                                 if (!isAdded() ||
                                         !isHost ||
+                                        auctionPhaseComplete ||
                                         roomRef == null ||
                                         auctionRef == null) {
 
-                                    hostSkippingPlayer = false;
+                                    hostSkippingPlayer =
+                                            false;
 
                                     return;
                                 }
 
 
-                                // ==================================================
-                                // CREATE SET OF USED PLAYER IDS
-                                // ==================================================
-
                                 Set<String> usedPlayerIds =
                                         new HashSet<>();
 
 
-                                for (DataSnapshot usedPlayerSnapshot :
+                                for (DataSnapshot usedPlayer :
                                         snapshot.getChildren()) {
 
 
                                     Boolean used =
-                                            usedPlayerSnapshot
-                                                    .getValue(
-                                                            Boolean.class
-                                                    );
+                                            usedPlayer.getValue(
+                                                    Boolean.class
+                                            );
 
 
-                                    String usedPlayerId =
-                                            usedPlayerSnapshot
-                                                    .getKey();
+                                    String id =
+                                            usedPlayer.getKey();
 
 
-                                    if (Boolean.TRUE.equals(used) &&
-                                            usedPlayerId != null) {
+                                    if (Boolean.TRUE.equals(
+                                            used
+                                    ) &&
+                                            id != null) {
+
 
                                         usedPlayerIds.add(
-                                                usedPlayerId
+                                                id
                                         );
                                     }
                                 }
 
 
                                 // ==================================================
-                                // CREATE AVAILABLE PLAYER LIST
+                                // BUILD AVAILABLE PLAYER LIST
                                 // ==================================================
 
                                 List<Player> availablePlayers =
@@ -2335,17 +2452,16 @@ public class AuctionFragment extends Fragment {
                                         allPlayers) {
 
 
-                                    String footballerId =
+                                    String id =
                                             String.valueOf(
                                                     player.getId()
                                             );
 
 
-                                    // Only add players who have
-                                    // never appeared in this room.
                                     if (!usedPlayerIds.contains(
-                                            footballerId
+                                            id
                                     )) {
+
 
                                         availablePlayers.add(
                                                 player
@@ -2355,35 +2471,38 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==================================================
-                                // ALL PLAYERS HAVE BEEN USED
+                                // NO PLAYERS LEFT
                                 // ==================================================
 
                                 if (availablePlayers.isEmpty()) {
 
-                                    hostSkippingPlayer = false;
 
-                                    hostCheckingWinner = false;
+                                    hostSkippingPlayer =
+                                            false;
 
-                                    showAuctionFinished();
+
+                                    Toast.makeText(
+                                            requireContext(),
+                                            "No more footballers available",
+                                            Toast.LENGTH_LONG
+                                    ).show();
+
 
                                     return;
                                 }
 
 
                                 // ==================================================
-                                // SELECT RANDOM UNUSED PLAYER
+                                // PICK RANDOM UNUSED PLAYER
                                 // ==================================================
-
-                                Random random =
-                                        new Random();
-
 
                                 Player selectedPlayer =
                                         availablePlayers.get(
 
-                                                random.nextInt(
-                                                        availablePlayers.size()
-                                                )
+                                                new Random()
+                                                        .nextInt(
+                                                                availablePlayers.size()
+                                                        )
 
                                         );
 
@@ -2395,7 +2514,7 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==================================================
-                                // CREATE PLAYER DATA
+                                // PLAYER DATA
                                 // ==================================================
 
                                 Map<String, Object> playerData =
@@ -2433,22 +2552,21 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==================================================
-                                // UPDATE FIREBASE
+                                // ATOMIC FIREBASE UPDATE
+                                //
+                                // This:
+                                //
+                                // 1. Marks footballer as used.
+                                // 2. Sets new current footballer.
+                                // 3. Resets bid.
+                                // 4. Resets highest bidder.
+                                // 5. Resets GIVE UP states.
+                                // 6. Clears previous result.
                                 // ==================================================
 
                                 Map<String, Object> updates =
                                         new HashMap<>();
 
-
-                                /*
-                                 * Mark the player as used immediately
-                                 * when they enter the auction.
-                                 *
-                                 * This means:
-                                 *
-                                 * SOLD -> cannot appear again
-                                 * SKIPPED -> cannot appear again
-                                 */
 
                                 updates.put(
                                         "usedPlayers/"
@@ -2457,21 +2575,18 @@ public class AuctionFragment extends Fragment {
                                 );
 
 
-                                // Set new auction player
                                 updates.put(
                                         "auction/currentPlayer",
                                         playerData
                                 );
 
 
-                                // Reset current bid
                                 updates.put(
                                         "auction/currentBid",
                                         0
                                 );
 
 
-                                // Reset highest bidder
                                 updates.put(
                                         "auction/highestBidderId",
                                         null
@@ -2484,28 +2599,24 @@ public class AuctionFragment extends Fragment {
                                 );
 
 
-                                // Reset give-up list
                                 updates.put(
                                         "auction/givenUpPlayers",
                                         null
                                 );
 
 
-                                // Reset completed state
                                 updates.put(
                                         "auction/completed",
                                         false
                                 );
 
 
-                                // Remove previous result
                                 updates.put(
                                         "auction/result",
                                         null
                                 );
 
 
-                                // Reset skipped state
                                 updates.put(
                                         "auction/skipped",
                                         false
@@ -2519,7 +2630,7 @@ public class AuctionFragment extends Fragment {
 
 
                                 // ==================================================
-                                // SEND UPDATE
+                                // APPLY NEW AUCTION
                                 // ==================================================
 
                                 roomRef
@@ -2528,16 +2639,15 @@ public class AuctionFragment extends Fragment {
                                         )
                                         .addOnCompleteListener(task -> {
 
-                                            // Allow winner/skip checks
-                                            // for the new player.
+
                                             hostSkippingPlayer =
                                                     false;
+
 
                                             hostCheckingWinner =
                                                     false;
 
                                         });
-
                             }
 
 
@@ -2548,132 +2658,11 @@ public class AuctionFragment extends Fragment {
 
                                 hostSkippingPlayer =
                                         false;
-
-                                hostCheckingWinner =
-                                        false;
-
                             }
                         }
                 );
     }
 
-
-    // ==================================================
-    // AUCTION FINISHED - ALL PLAYERS USED
-    // ==================================================
-
-    private void showAuctionFinished() {
-
-        if (!isAdded()) {
-            return;
-        }
-
-
-        resultAnimationRunning =
-                false;
-
-        hostSkippingPlayer =
-                false;
-
-        hostCheckingWinner =
-                false;
-
-
-        // ==================================================
-        // UPDATE UI
-        // ==================================================
-
-        if (txtAuctionPlayerName != null) {
-
-            txtAuctionPlayerName.setText(
-                    "AUCTION COMPLETE"
-            );
-        }
-
-
-        if (txtPlayerPosition != null) {
-
-            txtPlayerPosition.setText(
-                    "ALL PLAYERS HAVE BEEN USED"
-            );
-        }
-
-
-        if (txtCurrentBid != null) {
-
-            txtCurrentBid.setText(
-                    "$0M"
-            );
-        }
-
-
-        if (txtHighestBidder != null) {
-
-            txtHighestBidder.setText(
-                    "AUCTION FINISHED"
-            );
-        }
-
-
-        // ==================================================
-        // REMOVE PLAYER IMAGE
-        // ==================================================
-
-        if (imgAuctionPlayer != null) {
-
-            imgAuctionPlayer.setImageDrawable(
-                    null
-            );
-        }
-
-
-        // ==================================================
-        // HIDE SOLD OVERLAY
-        // ==================================================
-
-        if (txtSoldOverlay != null) {
-
-            txtSoldOverlay.setVisibility(
-                    View.GONE
-            );
-        }
-
-
-        // ==================================================
-        // DISABLE BIDDING
-        // ==================================================
-
-        if (etBidAmount != null) {
-
-            etBidAmount.setEnabled(
-                    false
-            );
-        }
-
-
-        if (btnBid != null) {
-
-            btnBid.setEnabled(
-                    false
-            );
-
-            btnBid.setAlpha(
-                    0.4f
-            );
-        }
-
-
-        if (btnGiveUp != null) {
-
-            btnGiveUp.setEnabled(
-                    false
-            );
-
-            btnGiveUp.setAlpha(
-                    0.4f
-            );
-        }
-    }
 
     // ==================================================
     // HANDLE COMPLETED AUCTION
@@ -2683,7 +2672,9 @@ public class AuctionFragment extends Fragment {
             DataSnapshot resultSnapshot
     ) {
 
-        if (!resultSnapshot.exists()) {
+        if (!resultSnapshot.exists() ||
+                auctionPhaseComplete) {
+
             return;
         }
 
@@ -2696,30 +2687,21 @@ public class AuctionFragment extends Fragment {
                         );
 
 
-        if (resultId == null) {
-            return;
-        }
-
-
-        // ==================================================
-        // PREVENT SAME RESULT TWICE
-        // ==================================================
-
-        if (resultId.equals(
-                lastHandledResultId
-        )) {
+        if (resultId == null ||
+                resultId.equals(
+                        lastHandledResultId
+                )) {
 
             return;
         }
 
+
+        // Prevent the same SOLD result from being handled
+        // multiple times on this device.
 
         lastHandledResultId =
                 resultId;
 
-
-        // ==================================================
-        // GET RESULT DATA
-        // ==================================================
 
         String winnerName =
                 resultSnapshot
@@ -2746,50 +2728,21 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // DISABLE INPUT
+        // LOCK CONTROLS
         // ==================================================
 
-        if (etBidAmount != null) {
-
-            etBidAmount.setEnabled(
-                    false
-            );
-        }
-
-
-        if (btnBid != null) {
-
-            btnBid.setEnabled(
-                    false
-            );
-
-            btnBid.setAlpha(
-                    0.4f
-            );
-        }
-
-
-        if (btnGiveUp != null) {
-
-            btnGiveUp.setEnabled(
-                    false
-            );
-
-            btnGiveUp.setAlpha(
-                    0.4f
-            );
-        }
+        disableAuctionControls();
 
 
         // ==================================================
-        // PLAY HAMMER SOUND
+        // HAMMER SOUND
         // ==================================================
 
         playHammerSound();
 
 
         // ==================================================
-        // SHOW SOLD OVERLAY
+        // SOLD OVERLAY
         // ==================================================
 
         if (txtSoldOverlay != null) {
@@ -2801,25 +2754,31 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // SHOW RESULT TEXT
+        // RESULT TEXT
         // ==================================================
 
-        if (footballerName != null &&
-                winnerName != null &&
-                txtHighestBidder != null) {
+        if (txtHighestBidder != null &&
+                footballerName != null &&
+                winnerName != null) {
 
 
             String resultText =
                     footballerName.toUpperCase()
+
                             + " SOLD TO "
+
                             + winnerName.toUpperCase();
 
 
             if (winningBid != null) {
 
+
                 resultText +=
+
                         " • $"
+
                                 + winningBid
+
                                 + "M";
             }
 
@@ -2831,13 +2790,50 @@ public class AuctionFragment extends Fragment {
 
 
         // ==================================================
-        // WAIT THEN ANIMATE SOLD CARD
+        // HOST LOADS NEXT PLAYER AFTER 2 SECONDS
+        //
+        // IMPORTANT:
+        // Firebase progression is independent of animation.
+        // ==================================================
+
+        if (isHost &&
+                playerCard != null) {
+
+
+            playerCard.postDelayed(
+
+                    () -> {
+
+                        if (!auctionPhaseComplete &&
+                                isAdded()) {
+
+                            loadNextPlayer();
+                        }
+
+                    },
+
+                    2000
+            );
+
+
+        } else if (isHost) {
+
+
+            loadNextPlayer();
+        }
+
+
+        // ==================================================
+        // VISUAL SOLD ANIMATION
         // ==================================================
 
         if (playerCard != null) {
 
+
             playerCard.postDelayed(
+
                     this::animateSoldPlayer,
+
                     1200
             );
         }
@@ -2851,15 +2847,23 @@ public class AuctionFragment extends Fragment {
     private void playHammerSound() {
 
         if (hammerSound == null) {
+
             return;
         }
 
 
         try {
 
+            if (hammerSound.isPlaying()) {
+
+                hammerSound.pause();
+            }
+
+
             hammerSound.seekTo(
                     0
             );
+
 
             hammerSound.start();
 
@@ -2870,13 +2874,18 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
-    // SOLD PLAYER CARD ANIMATION
+    // SOLD PLAYER ANIMATION
+    //
+    // VISUAL ONLY
+    //
+    // Loading the next player does NOT depend on this.
     // ==================================================
 
     private void animateSoldPlayer() {
 
         if (playerCard == null ||
-                resultAnimationRunning) {
+                resultAnimationRunning ||
+                auctionPhaseComplete) {
 
             return;
         }
@@ -2886,12 +2895,10 @@ public class AuctionFragment extends Fragment {
                 true;
 
 
-        /*
-         * SOLD PLAYER:
-         *
-         * Move the old card
-         * out to the RIGHT.
-         */
+        playerCard
+                .animate()
+                .cancel();
+
 
         playerCard
                 .animate()
@@ -2908,20 +2915,6 @@ public class AuctionFragment extends Fragment {
                 .withEndAction(() -> {
 
 
-                    // ==================================================
-                    // HOST LOADS NEXT PLAYER
-                    // ==================================================
-
-                    if (isHost) {
-
-                        loadNextPlayer();
-                    }
-
-
-                    // ==================================================
-                    // HIDE SOLD OVERLAY
-                    // ==================================================
-
                     if (txtSoldOverlay != null) {
 
                         txtSoldOverlay.setVisibility(
@@ -2930,187 +2923,11 @@ public class AuctionFragment extends Fragment {
                     }
 
 
-                    if (playerCard == null) {
-
-                        resultAnimationRunning =
-                                false;
-
-                        return;
-                    }
-
-
-                    /*
-                     * Put card outside
-                     * the LEFT side.
-                     */
-
-                    playerCard.setTranslationX(
-                            -playerCard.getWidth()
-                                    - 500f
-                    );
-
-
-                    playerCard.setAlpha(
-                            0f
-                    );
-
-
-                    /*
-                     * NEW PLAYER:
-                     *
-                     * Card enters
-                     * FROM THE LEFT.
-                     */
-
-                    playerCard
-                            .animate()
-                            .translationX(
-                                    0f
-                            )
-                            .alpha(
-                                    1f
-                            )
-                            .setDuration(
-                                    700
-                            )
-                            .withEndAction(() -> {
-
-                                resultAnimationRunning =
-                                        false;
-
-                            })
-                            .start();
+                    resultAnimationRunning =
+                            false;
 
                 })
                 .start();
-    }
-
-
-    // ==================================================
-    // UPDATE BIDDING CONTROLS
-    // ==================================================
-
-    private void updateBiddingControls() {
-
-
-        // ==================================================
-        // PLAYER GAVE UP
-        // ==================================================
-
-        if (hasGivenUp) {
-
-            if (etBidAmount != null) {
-
-                etBidAmount.setEnabled(
-                        false
-                );
-            }
-
-
-            if (btnBid != null) {
-
-                btnBid.setEnabled(
-                        false
-                );
-
-                btnBid.setAlpha(
-                        0.4f
-                );
-            }
-
-
-            if (btnGiveUp != null) {
-
-                btnGiveUp.setEnabled(
-                        false
-                );
-
-                btnGiveUp.setAlpha(
-                        0.4f
-                );
-            }
-
-
-            return;
-        }
-
-
-        // ==================================================
-        // HIGHEST BIDDER MUST WAIT
-        // ==================================================
-
-        if (amIHighestBidder) {
-
-            if (etBidAmount != null) {
-
-                etBidAmount.setEnabled(
-                        false
-                );
-            }
-
-
-            if (btnBid != null) {
-
-                btnBid.setEnabled(
-                        false
-                );
-
-                btnBid.setAlpha(
-                        0.4f
-                );
-            }
-
-
-            if (btnGiveUp != null) {
-
-                btnGiveUp.setEnabled(
-                        false
-                );
-
-                btnGiveUp.setAlpha(
-                        0.4f
-                );
-            }
-
-
-            return;
-        }
-
-
-        // ==================================================
-        // PLAYER CAN BID / GIVE UP
-        // ==================================================
-
-        if (etBidAmount != null) {
-
-            etBidAmount.setEnabled(
-                    true
-            );
-        }
-
-
-        if (btnBid != null) {
-
-            btnBid.setEnabled(
-                    true
-            );
-
-            btnBid.setAlpha(
-                    1f
-            );
-        }
-
-
-        if (btnGiveUp != null) {
-
-            btnGiveUp.setEnabled(
-                    true
-            );
-
-            btnGiveUp.setAlpha(
-                    1f
-            );
-        }
     }
 
 
@@ -3121,6 +2938,7 @@ public class AuctionFragment extends Fragment {
     private void listenToMyBudget() {
 
         if (myPlayerRef == null) {
+
             return;
         }
 
@@ -3156,12 +2974,13 @@ public class AuctionFragment extends Fragment {
 
                                         if (txtRemainingBudget != null) {
 
-                                            txtRemainingBudget
-                                                    .setText(
-                                                            "$"
-                                                                    + myBudget
-                                                                    + "M"
-                                                    );
+                                            txtRemainingBudget.setText(
+
+                                                    "$"
+                                                            + myBudget
+                                                            + "M"
+
+                                            );
                                         }
                                     }
 
@@ -3178,52 +2997,121 @@ public class AuctionFragment extends Fragment {
 
 
     // ==================================================
-    // DESTROY VIEW
+    // UPDATE BIDDING CONTROLS
+    // ==================================================
+
+    private void updateBiddingControls() {
+
+        if (auctionPhaseComplete ||
+                mySquadFull ||
+                hasGivenUp ||
+                amIHighestBidder) {
+
+
+            disableAuctionControls();
+
+            return;
+        }
+
+
+        if (etBidAmount != null) {
+
+            etBidAmount.setEnabled(
+                    true
+            );
+        }
+
+
+        if (btnBid != null) {
+
+            btnBid.setEnabled(
+                    true
+            );
+
+
+            btnBid.setAlpha(
+                    1f
+            );
+        }
+
+
+        if (btnGiveUp != null) {
+
+            btnGiveUp.setEnabled(
+                    true
+            );
+
+
+            btnGiveUp.setAlpha(
+                    1f
+            );
+        }
+    }
+
+
+    // ==================================================
+    // DISABLE AUCTION CONTROLS
+    // ==================================================
+
+    private void disableAuctionControls() {
+
+        if (etBidAmount != null) {
+
+            etBidAmount.setEnabled(
+                    false
+            );
+        }
+
+
+        if (btnBid != null) {
+
+            btnBid.setEnabled(
+                    false
+            );
+
+
+            btnBid.setAlpha(
+                    0.4f
+            );
+        }
+
+
+        if (btnGiveUp != null) {
+
+            btnGiveUp.setEnabled(
+                    false
+            );
+
+
+            btnGiveUp.setAlpha(
+                    0.4f
+            );
+        }
+    }
+
+
+    // ==================================================
+    // CLEANUP
     // ==================================================
 
     @Override
     public void onDestroyView() {
 
-
-        // ==================================================
-        // CANCEL LIVE DOT ANIMATION
-        // ==================================================
-
-        if (liveDot != null) {
-
-            liveDot.animate()
-                    .cancel();
-        }
+        super.onDestroyView();
 
 
         // ==================================================
-        // CANCEL PLAYER CARD ANIMATION
-        // ==================================================
-
-        if (playerCard != null) {
-
-            playerCard.animate()
-                    .cancel();
-        }
-
-
-        // ==================================================
-        // REMOVE FIREBASE AUCTION LISTENER
+        // REMOVE FIREBASE LISTENERS
         // ==================================================
 
         if (auctionRef != null &&
                 auctionListener != null) {
 
-            auctionRef
-                    .removeEventListener(
-                            auctionListener
-                    );
+            auctionRef.removeEventListener(
+                    auctionListener
+            );
         }
 
-
-        // ==================================================
-        // REMOVE BUDGET LISTENER
-        // ==================================================
 
         if (myPlayerRef != null &&
                 budgetListener != null) {
@@ -3236,25 +3124,59 @@ public class AuctionFragment extends Fragment {
         }
 
 
+        if (myPlayerRef != null &&
+                teamListener != null) {
+
+            myPlayerRef
+                    .child("team")
+                    .removeEventListener(
+                            teamListener
+                    );
+        }
+
+
+        if (gamePhaseRef != null &&
+                gamePhaseListener != null) {
+
+            gamePhaseRef.removeEventListener(
+                    gamePhaseListener
+            );
+        }
+
+
+        // ==================================================
+        // STOP ANIMATIONS
+        // ==================================================
+
+        if (playerCard != null) {
+
+            playerCard
+                    .animate()
+                    .cancel();
+        }
+
+
+        if (liveDot != null) {
+
+            liveDot.clearAnimation();
+        }
+
+
         // ==================================================
         // RELEASE HAMMER SOUND
         // ==================================================
 
         if (hammerSound != null) {
 
+
             try {
 
-                if (hammerSound.isPlaying()) {
-
-                    hammerSound.stop();
-                }
+                hammerSound.release();
 
             } catch (Exception ignored) {
 
             }
 
-
-            hammerSound.release();
 
             hammerSound =
                     null;
@@ -3267,19 +3189,15 @@ public class AuctionFragment extends Fragment {
 
         if (cardSound != null) {
 
+
             try {
 
-                if (cardSound.isPlaying()) {
-
-                    cardSound.stop();
-                }
+                cardSound.release();
 
             } catch (Exception ignored) {
 
             }
 
-
-            cardSound.release();
 
             cardSound =
                     null;
@@ -3293,40 +3211,48 @@ public class AuctionFragment extends Fragment {
         playerCard =
                 null;
 
+
         liveDot =
                 null;
+
 
         imgAuctionPlayer =
                 null;
 
+
         txtAuctionPlayerName =
                 null;
+
 
         txtPlayerPosition =
                 null;
 
+
         txtCurrentBid =
                 null;
+
 
         txtHighestBidder =
                 null;
 
+
         txtRemainingBudget =
                 null;
+
 
         txtSoldOverlay =
                 null;
 
+
         etBidAmount =
                 null;
+
 
         btnBid =
                 null;
 
+
         btnGiveUp =
                 null;
-
-
-        super.onDestroyView();
     }
 }

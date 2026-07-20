@@ -70,10 +70,8 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
             // ==================================================
 
         } else {
-
             fragment = new FormationFragment();
         }
-
 
         // ==================================================
         // PASS ROOM / PLAYER DATA
@@ -99,7 +97,6 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
                 playerName
         );
 
-
         bundle.putBoolean(
                 "IS_HOST",
                 isHost
@@ -109,8 +106,6 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
         fragment.setArguments(
                 bundle
         );
-
-
         return fragment;
     }
 
@@ -121,7 +116,6 @@ public class AuctionPagerAdapter extends FragmentStateAdapter {
 
     @Override
     public int getItemCount() {
-
         return 3;
     }
 }

@@ -30,4 +30,30 @@
   {"id":28,"name":"Franz Beckenbauer","position":"CB","type":"Icon","image":"beckenbauer"},
   {"id":29,"name":"Lev Yashin","position":"GK","type":"Icon","image":"yashin"},
   {"id":30,"name":"Garrincha","position":"RW","type":"Icon","image":"garrincha"}
+
+
+,
+  {"id":31,"name":"Gianluigi Donnarumma","position":"GK","type":"Current","image":"donnarumma"},
+  {"id":32,"name":"William Saliba","position":"CB","type":"Current","image":"saliba"},
+  {"id":33,"name":"Achraf Hakimi","position":"RB","type":"Current","image":"hakimi"},
+  {"id":34,"name":"Theo Hernandez","position":"LB","type":"Current","image":"theohernandez"},
+  {"id":35,"name":"Federico Valverde","position":"CM","type":"Current","image":"valverde"},
+  {"id":36,"name":"Declan Rice","position":"CDM","type":"Current","image":"declanrice"},
+  {"id":37,"name":"Raphinha","position":"LW","type":"Current","image":"raphinha"},
+  {"id":38,"name":"Lautaro Martinez","position":"ST","type":"Current","image":"lautaro"},
+
+  {"id":39,"name":"Cafu","position":"RB","type":"Icon","image":"cafu"},
+  {"id":40,"name":"Roberto Carlos","position":"LB","type":"Icon","image":"robertocarlos"},
+  {"id":41,"name":"Iker Casillas","position":"GK","type":"Icon","image":"casillas"},
+  {"id":42,"name":"Carles Puyol","position":"CB","type":"Icon","image":"puyol"},
+  {"id":43,"name":"Andrea Pirlo","position":"CM","type":"Icon","image":"pirlo"},
+  {"id":44,"name":"Claude Makelele","position":"CDM","type":"Icon","image":"makelele"},
+  {"id":45,"name":"Thierry Henry","position":"LW","type":"Icon","image":"henry"}
+
+,
+  {"id":46,"name":"Alphonso Davies","position":"LB","type":"Current","image":"alphonsodavies"},
+  {"id":47,"name":"Trent Alexander-Arnold","position":"RB","type":"Current","image":"trent"},
+  {"id":48,"name":"Martin Odegaard","position":"CAM","type":"Current","image":"odegaard"},
+  {"id":49,"name":"Lothar Matthaus","position":"CDM","type":"Icon","image":"matthaus"},
+  {"id":50,"name":"Manuel Neuer","position":"GK","type":"Icon","image":"neuer"}
 ]

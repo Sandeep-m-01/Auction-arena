@@ -52,6 +52,7 @@ public class WaitingLobbyActivity extends AppCompatActivity {
 
     private String roomCode;
     private String playerId;
+    private String playerName;
 
     private boolean isHost;
 
@@ -149,6 +150,15 @@ public class WaitingLobbyActivity extends AppCompatActivity {
         playerId =
                 intent.getStringExtra(
                         "PLAYER_ID"
+                );
+
+
+        // NEW:
+        // Get player name from previous screen
+
+        playerName =
+                intent.getStringExtra(
+                        "PLAYER_NAME"
                 );
 
 
@@ -310,6 +320,7 @@ public class WaitingLobbyActivity extends AppCompatActivity {
 
 
                                             // Invalid player
+
                                             if (name == null ||
                                                     name.trim().isEmpty()) {
 
@@ -482,7 +493,7 @@ public class WaitingLobbyActivity extends AppCompatActivity {
 
 
         // ==================================================
-        // SMALLER FONT SIZE
+        // FONT SIZE
         // ==================================================
 
         playerView.setTextSize(
@@ -665,7 +676,9 @@ public class WaitingLobbyActivity extends AppCompatActivity {
                 );
 
 
-        // Room code
+        // ==================================================
+        // PASS ROOM CODE
+        // ==================================================
 
         intent.putExtra(
                 "ROOM_CODE",
@@ -673,7 +686,9 @@ public class WaitingLobbyActivity extends AppCompatActivity {
         );
 
 
-        // Player ID
+        // ==================================================
+        // PASS PLAYER ID
+        // ==================================================
 
         intent.putExtra(
                 "PLAYER_ID",
@@ -681,7 +696,19 @@ public class WaitingLobbyActivity extends AppCompatActivity {
         );
 
 
-        // Host status
+        // ==================================================
+        // PASS PLAYER NAME
+        // ==================================================
+
+        intent.putExtra(
+                "PLAYER_NAME",
+                playerName
+        );
+
+
+        // ==================================================
+        // PASS HOST STATUS
+        // ==================================================
 
         intent.putExtra(
                 "IS_HOST",
@@ -689,14 +716,18 @@ public class WaitingLobbyActivity extends AppCompatActivity {
         );
 
 
-        // Open Auction
+        // ==================================================
+        // OPEN AUCTION
+        // ==================================================
 
         startActivity(
                 intent
         );
 
 
-        // Remove lobby from back stack
+        // ==================================================
+        // REMOVE LOBBY FROM BACK STACK
+        // ==================================================
 
         finish();
     }

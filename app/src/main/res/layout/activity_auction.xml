@@ -6,7 +6,6 @@
     android:layout_height="match_parent">
 
     <!-- Main Background -->
-
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -15,7 +14,6 @@
         android:contentDescription="@null" />
 
     <!-- Dark Overlay -->
-
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -24,8 +22,9 @@
     <!--
         ViewPager2
 
-        Page 1 = AuctionFragment
-        Page 2 = MyTeamFragment
+        Page 0 = AuctionFragment
+        Page 1 = MyTeamFragment
+        Page 2 = FormationFragment
     -->
 
     <androidx.viewpager2.widget.ViewPager2

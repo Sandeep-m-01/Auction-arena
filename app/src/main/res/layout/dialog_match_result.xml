@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/resultCard"
+    android:layout_width="300dp"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:gravity="center"
+    android:padding="28dp"
+    android:background="@drawable/bg_match_result_dialog">
+
+    <TextView
+        android:id="@+id/txtResultIcon"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="🏆"
+        android:textSize="52sp"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/txtResultTitle"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="VICTORY"
+        android:textSize="28sp"
+        android:textStyle="bold"
+        android:textColor="#D4AF37"
+        android:letterSpacing="0.12"
+        android:gravity="center" />
+
+    <TextView
+        android:id="@+id/txtResultMessage"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="14dp"
+        android:text="YOUR TEAM DOMINATED!"
+        android:textSize="14sp"
+        android:textColor="#FFFFFF"
+        android:gravity="center" />
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="24dp"
+        android:text="FINAL SCORE"
+        android:textSize="12sp"
+        android:textStyle="bold"
+        android:textColor="#AFAFAF"
+        android:letterSpacing="0.1" />
+
+    <TextView
+        android:id="@+id/txtResultScore"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:text="875"
+        android:textSize="34sp"
+        android:textStyle="bold"
+        android:textColor="#FFFFFF" />
+
+    <TextView
+        android:id="@+id/btnResultContinue"
+        android:layout_width="match_parent"
+        android:layout_height="50dp"
+        android:layout_marginTop="26dp"
+        android:gravity="center"
+        android:text="CONTINUE"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:textColor="#111111"
+        android:background="@drawable/bg_result_button" />
+
+</LinearLayout>

@@ -1,23 +1,18 @@
 package com.sandeep.auctionarena;
 
-import android.app.AlertDialog;
-import android.graphics.Color;
 import android.os.Bundle;
-import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.core.content.res.ResourcesCompat;
+import androidx.appcompat.app.AlertDialog;
 import androidx.fragment.app.Fragment;
-import androidx.viewpager2.widget.ViewPager2;
 
 import com.google.firebase.database.DataSnapshot;
 import com.google.firebase.database.DatabaseError;
@@ -27,12 +22,11 @@ import com.google.firebase.database.ValueEventListener;
 
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 
 public class FormationFragment extends Fragment {
+
 
     // ==================================================
     // CONFIG
@@ -41,36 +35,42 @@ public class FormationFragment extends Fragment {
     private static final String DATABASE_URL =
             "https://auctionarena-c777d-default-rtdb.asia-southeast1.firebasedatabase.app";
 
-    private static final long STARTING_BUDGET = 1000L;
-
     private static final int MAX_FORMATION_PLAYERS = 11;
+
+    private static final long STARTING_BUDGET = 1000L;
 
 
     // ==================================================
-    // ROOM / PLAYER
+    // ROOM / PLAYER DATA
     // ==================================================
 
     private String roomCode;
     private String playerId;
+    private String playerName;
+
+    private boolean isHost;
 
 
     // ==================================================
     // UI
     // ==================================================
 
-    private FrameLayout formationContainer;
+    private ViewGroup formationContainer;
 
+    private TextView txtFormationTitle;
     private TextView txtFormationBudget;
     private TextView txtFormationPlayerCount;
     private TextView txtEmptyFormation;
 
     private View btnAddFormationPlayer;
+    private View btnSubmitFormation;
 
 
     // ==================================================
     // FIREBASE
     // ==================================================
 
+    private DatabaseReference roomRef;
     private DatabaseReference myPlayerRef;
     private DatabaseReference teamRef;
     private DatabaseReference formationRef;
@@ -79,20 +79,51 @@ public class FormationFragment extends Fragment {
     private ValueEventListener teamListener;
     private ValueEventListener formationListener;
 
+    // NEW:
+    // Host watches all managers' submission states.
+    private ValueEventListener playersSubmissionListener;
+
+    // NEW:
+    // Every manager watches the final match result.
+    private ValueEventListener matchResultListener;
+
 
     // ==================================================
     // LOCAL DATA
     // ==================================================
 
-    private final List<TeamPlayer> ownedPlayers =
+    private final List<FormationPlayer> teamPlayers =
             new ArrayList<>();
 
-    private final Set<String> formationPlayerIds =
-            new HashSet<>();
+    private final Map<String, FormationPlayer> formationPlayers =
+            new HashMap<>();
 
-    private int formationPlayerCount = 0;
+    private final Map<String, View> formationPlayerViews =
+            new HashMap<>();
 
-    private boolean playerBeingDragged = false;
+
+    // ==================================================
+    // STATE
+    // ==================================================
+
+    private long currentBudget =
+            STARTING_BUDGET;
+
+    private boolean formationLoaded =
+            false;
+
+    private boolean formationSubmitted =
+            false;
+
+    // Prevent the Victory / Defeat dialog
+    // from appearing more than once.
+    private boolean resultShown =
+            false;
+
+    // Prevent repeated host-side result calculation
+    // while Firebase listeners are firing.
+    private boolean resultCalculationStarted =
+            false;
 
 
     // ==================================================
@@ -100,7 +131,8 @@ public class FormationFragment extends Fragment {
     // ==================================================
 
     public FormationFragment() {
-        // Required empty constructor
+
+        // Required empty constructor.
     }
 
 
@@ -113,18 +145,36 @@ public class FormationFragment extends Fragment {
             @Nullable Bundle savedInstanceState
     ) {
 
-        super.onCreate(savedInstanceState);
+        super.onCreate(
+                savedInstanceState
+        );
+
 
         if (getArguments() != null) {
+
 
             roomCode =
                     getArguments().getString(
                             "ROOM_CODE"
                     );
 
+
             playerId =
                     getArguments().getString(
                             "PLAYER_ID"
+                    );
+
+
+            playerName =
+                    getArguments().getString(
+                            "PLAYER_NAME"
+                    );
+
+
+            isHost =
+                    getArguments().getBoolean(
+                            "IS_HOST",
+                            false
                     );
         }
     }
@@ -166,9 +216,19 @@ public class FormationFragment extends Fragment {
         );
 
 
+        // ==================================================
+        // CONNECT UI
+        // ==================================================
+
         formationContainer =
                 view.findViewById(
                         R.id.formationContainer
+                );
+
+
+        txtFormationTitle =
+                view.findViewById(
+                        R.id.txtFormationTitle
                 );
 
 
@@ -196,38 +256,28 @@ public class FormationFragment extends Fragment {
                 );
 
 
-        // ==================================================
-        // DEFAULT UI
-        // ==================================================
-
-        txtFormationBudget.setText(
-                "$1000M"
-        );
-
-
-        txtFormationPlayerCount.setText(
-                "0 / 11"
-        );
-
-
-        txtEmptyFormation.setVisibility(
-                View.VISIBLE
-        );
+        btnSubmitFormation =
+                view.findViewById(
+                        R.id.btnSubmitFormation
+                );
 
 
         // ==================================================
-        // VALIDATE
+        // VALIDATE ROOM / PLAYER
         // ==================================================
 
         if (roomCode == null ||
-                roomCode.trim().isEmpty()) {
-
-            return;
-        }
-
-
-        if (playerId == null ||
+                roomCode.trim().isEmpty() ||
+                playerId == null ||
                 playerId.trim().isEmpty()) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Room or player data missing",
+                    Toast.LENGTH_SHORT
+            ).show();
+
 
             return;
         }
@@ -243,11 +293,15 @@ public class FormationFragment extends Fragment {
                 );
 
 
-        myPlayerRef =
+        roomRef =
                 database
                         .getReference()
                         .child("rooms")
-                        .child(roomCode)
+                        .child(roomCode);
+
+
+        myPlayerRef =
+                roomRef
                         .child("players")
                         .child(playerId);
 
@@ -265,25 +319,87 @@ public class FormationFragment extends Fragment {
 
 
         // ==================================================
-        // LISTENERS
+        // TITLE
         // ==================================================
 
-        listenToBudget();
+        if (txtFormationTitle != null) {
 
-        listenToOwnedPlayers();
 
-        listenToFormation();
+            if (playerName != null &&
+                    !playerName.trim().isEmpty()) {
+
+
+                txtFormationTitle.setText(
+
+                        playerName
+                                .trim()
+                                .toUpperCase()
+                                + "'S FORMATION"
+
+                );
+
+
+            } else {
+
+
+                txtFormationTitle.setText(
+                        "FORMATION"
+                );
+            }
+        }
 
 
         // ==================================================
         // ADD PLAYER
         // ==================================================
 
-        btnAddFormationPlayer.setOnClickListener(v -> {
+        if (btnAddFormationPlayer != null) {
 
-            showPlayerSelectionDialog();
 
-        });
+            btnAddFormationPlayer.setOnClickListener(
+
+                    v -> showAddPlayerDialog()
+
+            );
+        }
+
+
+        // ==================================================
+        // SUBMIT FORMATION
+        // ==================================================
+
+        if (btnSubmitFormation != null) {
+
+
+            btnSubmitFormation.setOnClickListener(
+
+                    v -> submitFormation()
+
+            );
+        }
+
+
+        // ==================================================
+        // START FIREBASE LISTENERS
+        // ==================================================
+
+        listenToBudget();
+
+        listenToTeam();
+
+        listenToFormation();
+
+
+        // ==================================================
+        // NEW RESULT FLOW LISTENERS
+        // ==================================================
+
+        // Host continuously watches for all managers
+        // finishing their formations.
+        listenToAllFormationSubmissions();
+
+        // Every manager listens for the same final result.
+        listenToMatchResult();
     }
 
 
@@ -294,6 +410,7 @@ public class FormationFragment extends Fragment {
     private void listenToBudget() {
 
         if (myPlayerRef == null) {
+
             return;
         }
 
@@ -310,31 +427,36 @@ public class FormationFragment extends Fragment {
                                             @NonNull DataSnapshot snapshot
                                     ) {
 
-                                        if (!isAdded() ||
-                                                txtFormationBudget == null) {
-
-                                            return;
-                                        }
-
 
                                         Long budget =
-                                                snapshot.getValue(
-                                                        Long.class
+                                                getLongValue(
+                                                        snapshot
                                                 );
 
 
                                         if (budget == null) {
+
 
                                             budget =
                                                     STARTING_BUDGET;
                                         }
 
 
-                                        txtFormationBudget.setText(
-                                                "$"
-                                                        + budget
-                                                        + "M"
-                                        );
+                                        currentBudget =
+                                                budget;
+
+
+                                        if (txtFormationBudget != null) {
+
+
+                                            txtFormationBudget.setText(
+
+                                                    "$"
+                                                            + currentBudget
+                                                            + "M"
+
+                                            );
+                                        }
                                     }
 
 
@@ -350,12 +472,13 @@ public class FormationFragment extends Fragment {
 
 
     // ==================================================
-    // LOAD OWNED PLAYERS
+    // LISTEN TO TEAM
     // ==================================================
 
-    private void listenToOwnedPlayers() {
+    private void listenToTeam() {
 
         if (teamRef == null) {
+
             return;
         }
 
@@ -370,19 +493,28 @@ public class FormationFragment extends Fragment {
                                     @NonNull DataSnapshot snapshot
                             ) {
 
-                                ownedPlayers.clear();
+
+                                teamPlayers.clear();
 
 
                                 for (DataSnapshot playerSnapshot :
                                         snapshot.getChildren()) {
 
 
-                                    String id =
+                                    Object idObject =
                                             playerSnapshot
                                                     .child("id")
-                                                    .getValue(
-                                                            String.class
-                                                    );
+                                                    .getValue();
+
+
+                                    String id =
+                                            idObject != null
+
+                                                    ? String.valueOf(
+                                                    idObject
+                                            )
+
+                                                    : playerSnapshot.getKey();
 
 
                                     String name =
@@ -417,20 +549,28 @@ public class FormationFragment extends Fragment {
                                                     );
 
 
-                                    if (id == null) {
+                                    Long price =
+                                            getLongValue(
 
-                                        id =
-                                                playerSnapshot.getKey();
-                                    }
+                                                    playerSnapshot.child(
+                                                            "price"
+                                                    )
+
+                                            );
 
 
-                                    if (id == null) {
+                                    if (id == null ||
+                                            id.trim().isEmpty() ||
+                                            name == null ||
+                                            name.trim().isEmpty()) {
+
+
                                         continue;
                                     }
 
 
-                                    TeamPlayer player =
-                                            new TeamPlayer();
+                                    FormationPlayer player =
+                                            new FormationPlayer();
 
 
                                     player.id =
@@ -438,33 +578,44 @@ public class FormationFragment extends Fragment {
 
 
                                     player.name =
-                                            name != null
-                                                    ? name
-                                                    : "PLAYER";
+                                            name;
 
 
-                                    player.position =
-                                            position != null
-                                                    ? position
-                                                    : "";
+                                    player.originalPosition =
+                                            normalizePosition(
+                                                    position
+                                            );
+
+
+                                    player.currentPosition =
+                                            player.originalPosition;
 
 
                                     player.type =
-                                            type != null
-                                                    ? type
-                                                    : "";
+                                            type;
 
 
                                     player.image =
-                                            image != null
-                                                    ? image
-                                                    : "";
+                                            image;
 
 
-                                    ownedPlayers.add(
+                                    player.price =
+                                            price != null
+
+                                                    ? price
+
+                                                    : 0L;
+
+
+                                    teamPlayers.add(
                                             player
                                     );
                                 }
+
+
+                                updateFormationCounter();
+
+                                updateEmptyState();
                             }
 
 
@@ -481,11 +632,15 @@ public class FormationFragment extends Fragment {
 
     // ==================================================
     // LISTEN TO FORMATION
+    //
+    // YOUR EXISTING NO-BLINK FIX IS PRESERVED.
+    // Existing player Views are updated directly.
     // ==================================================
 
     private void listenToFormation() {
 
         if (formationRef == null) {
+
             return;
         }
 
@@ -500,371 +655,395 @@ public class FormationFragment extends Fragment {
                                     @NonNull DataSnapshot snapshot
                             ) {
 
+
                                 if (!isAdded() ||
                                         formationContainer == null) {
 
-                                    return;
-                                }
-
-
-                                /*
-                                 * IMPORTANT:
-                                 *
-                                 * Do not rebuild all cards while
-                                 * the user is dragging one.
-                                 *
-                                 * This makes dragging much smoother.
-                                 */
-
-                                if (playerBeingDragged) {
 
                                     return;
                                 }
 
 
-                                removeFormationPlayerViews();
+                                List<String> firebasePlayerIds =
+                                        new ArrayList<>();
 
 
-                                formationPlayerIds.clear();
-
-
-                                formationPlayerCount =
-                                        0;
-
-
-                                for (DataSnapshot formationPlayer :
+                                for (DataSnapshot playerSnapshot :
                                         snapshot.getChildren()) {
 
 
-                                    String footballerId =
-                                            formationPlayer
-                                                    .child("playerId")
-                                                    .getValue(
-                                                            String.class
-                                                    );
+                                    String id =
+                                            playerSnapshot.getKey();
+
+
+                                    if (id == null ||
+                                            id.trim().isEmpty()) {
+
+
+                                        continue;
+                                    }
+
+
+                                    firebasePlayerIds.add(
+                                            id
+                                    );
 
 
                                     String name =
-                                            formationPlayer
+                                            playerSnapshot
                                                     .child("name")
                                                     .getValue(
                                                             String.class
                                                     );
 
 
-                                    /*
-                                     * formationPosition is separate
-                                     * from the player's original
-                                     * football position.
-                                     */
-
-                                    String formationPosition =
-                                            formationPlayer
-                                                    .child("formationPosition")
+                                    String originalPosition =
+                                            playerSnapshot
+                                                    .child("originalPosition")
                                                     .getValue(
                                                             String.class
                                                     );
 
 
-                                    /*
-                                     * Backward compatibility:
-                                     *
-                                     * Existing Firebase formations
-                                     * may only have "position".
-                                     */
+                                    String currentPosition =
+                                            playerSnapshot
+                                                    .child("position")
+                                                    .getValue(
+                                                            String.class
+                                                    );
 
-                                    if (formationPosition == null) {
 
-                                        formationPosition =
-                                                formationPlayer
-                                                        .child("position")
-                                                        .getValue(
-                                                                String.class
-                                                        );
-                                    }
+                                    String type =
+                                            playerSnapshot
+                                                    .child("type")
+                                                    .getValue(
+                                                            String.class
+                                                    );
 
 
                                     String image =
-                                            formationPlayer
+                                            playerSnapshot
                                                     .child("image")
                                                     .getValue(
                                                             String.class
                                                     );
 
 
+                                    Long price =
+                                            getLongValue(
+
+                                                    playerSnapshot.child(
+                                                            "price"
+                                                    )
+
+                                            );
+
+
                                     Double x =
                                             getDoubleValue(
-                                                    formationPlayer
-                                                            .child("x")
+
+                                                    playerSnapshot.child(
+                                                            "x"
+                                                    )
+
                                             );
 
 
                                     Double y =
                                             getDoubleValue(
-                                                    formationPlayer
-                                                            .child("y")
+
+                                                    playerSnapshot.child(
+                                                            "y"
+                                                    )
+
                                             );
 
 
-                                    if (footballerId == null) {
+                                    // ======================================
+                                    // EXISTING PLAYER
+                                    // ======================================
+
+                                    FormationPlayer existingPlayer =
+                                            formationPlayers.get(
+                                                    id
+                                            );
+
+
+                                    if (existingPlayer != null) {
+
+
+                                        if (name != null) {
+
+
+                                            existingPlayer.name =
+                                                    name;
+                                        }
+
+
+                                        if (originalPosition != null &&
+                                                !originalPosition
+                                                        .trim()
+                                                        .isEmpty()) {
+
+
+                                            existingPlayer.originalPosition =
+                                                    normalizePosition(
+                                                            originalPosition
+                                                    );
+                                        }
+
+
+                                        if (currentPosition != null &&
+                                                !currentPosition
+                                                        .trim()
+                                                        .isEmpty()) {
+
+
+                                            existingPlayer.currentPosition =
+                                                    normalizePosition(
+                                                            currentPosition
+                                                    );
+                                        }
+
+
+                                        existingPlayer.type =
+                                                type;
+
+
+                                        existingPlayer.image =
+                                                image;
+
+
+                                        if (price != null) {
+
+
+                                            existingPlayer.price =
+                                                    price;
+                                        }
+
+
+                                        if (x != null) {
+
+
+                                            existingPlayer.x =
+                                                    x.floatValue();
+                                        }
+
+
+                                        if (y != null) {
+
+
+                                            existingPlayer.y =
+                                                    y.floatValue();
+                                        }
+
+
+                                        // ==================================
+                                        // UPDATE SAME VIEW
+                                        // ==================================
+
+                                        View existingView =
+                                                formationPlayerViews.get(
+                                                        id
+                                                );
+
+
+                                        if (existingView != null) {
+
+
+                                            TextView nameView =
+                                                    existingView.findViewById(
+
+                                                            R.id.txtFormationPlayerName
+
+                                                    );
+
+
+                                            TextView positionView =
+                                                    existingView.findViewById(
+
+                                                            R.id.txtFormationPlayerPosition
+
+                                                    );
+
+
+                                            if (nameView != null) {
+
+
+                                                nameView.setText(
+                                                        existingPlayer.name
+                                                );
+                                            }
+
+
+                                            if (positionView != null) {
+
+
+                                                positionView.setText(
+                                                        existingPlayer.currentPosition
+                                                );
+                                            }
+
+
+                                            placePlayerView(
+                                                    existingView,
+                                                    existingPlayer
+                                            );
+                                        }
+
+
                                         continue;
                                     }
 
 
-                                    /*
-                                     * Extra protection against
-                                     * duplicate cards.
-                                     */
+                                    // ======================================
+                                    // NEW PLAYER
+                                    // ======================================
 
-                                    if (formationPlayerIds.contains(
-                                            footballerId
-                                    )) {
+                                    FormationPlayer player =
+                                            new FormationPlayer();
 
-                                        continue;
+
+                                    player.id =
+                                            id;
+
+
+                                    player.name =
+                                            name != null
+
+                                                    ? name
+
+                                                    : "";
+
+
+                                    player.originalPosition =
+                                            normalizePosition(
+                                                    originalPosition
+                                            );
+
+
+                                    if (currentPosition == null ||
+                                            currentPosition
+                                                    .trim()
+                                                    .isEmpty()) {
+
+
+                                        player.currentPosition =
+                                                player.originalPosition;
+
+
+                                    } else {
+
+
+                                        player.currentPosition =
+                                                normalizePosition(
+                                                        currentPosition
+                                                );
                                     }
 
 
-                                    formationPlayerIds.add(
-                                            footballerId
-                                    );
+                                    player.type =
+                                            type;
 
 
-                                    createFormationPlayerView(
-                                            footballerId,
-                                            name,
-                                            formationPosition,
-                                            image,
+                                    player.image =
+                                            image;
+
+
+                                    player.price =
+                                            price != null
+
+                                                    ? price
+
+                                                    : 0L;
+
+
+                                    player.x =
                                             x != null
+
                                                     ? x.floatValue()
-                                                    : 0f,
+
+                                                    : -1f;
+
+
+                                    player.y =
                                             y != null
+
                                                     ? y.floatValue()
-                                                    : 0f
+
+                                                    : -1f;
+
+
+                                    formationPlayers.put(
+                                            id,
+                                            player
                                     );
 
 
-                                    formationPlayerCount++;
-                                }
+                                    if (!formationPlayerViews
+                                            .containsKey(
+                                                    id
+                                            )) {
 
 
-                                updateFormationUI();
-                            }
-
-
-                            @Override
-                            public void onCancelled(
-                                    @NonNull DatabaseError error
-                            ) {
-
-                            }
-                        }
-                );
-    }
-
-
-    // ==================================================
-    // GET DOUBLE FROM FIREBASE
-    // ==================================================
-
-    private Double getDoubleValue(
-            DataSnapshot snapshot
-    ) {
-
-        Object value =
-                snapshot.getValue();
-
-
-        if (value instanceof Number) {
-
-            return ((Number) value)
-                    .doubleValue();
-        }
-
-
-        return null;
-    }
-
-
-
-    // ==================================================
-    // SHOW PLAYER SELECTION
-    // ==================================================
-
-    private void showPlayerSelectionDialog() {
-
-        if (!isAdded() ||
-                formationRef == null) {
-
-            return;
-        }
-
-
-        if (formationPlayerCount >=
-                MAX_FORMATION_PLAYERS) {
-
-
-            new AlertDialog.Builder(
-                    requireContext()
-            )
-                    .setTitle(
-                            "Formation Full"
-                    )
-                    .setMessage(
-                            "You already have 11 players on the field."
-                    )
-                    .setPositiveButton(
-                            "OK",
-                            null
-                    )
-                    .show();
-
-
-            return;
-        }
-
-
-        if (ownedPlayers.isEmpty()) {
-
-
-            new AlertDialog.Builder(
-                    requireContext()
-            )
-                    .setTitle(
-                            "No Players"
-                    )
-                    .setMessage(
-                            "Win players in the auction before adding them to your formation."
-                    )
-                    .setPositiveButton(
-                            "OK",
-                            null
-                    )
-                    .show();
-
-
-            return;
-        }
-
-
-        formationRef
-                .addListenerForSingleValueEvent(
-
-                        new ValueEventListener() {
-
-                            @Override
-                            public void onDataChange(
-                                    @NonNull DataSnapshot snapshot
-                            ) {
-
-                                if (!isAdded()) {
-                                    return;
-                                }
-
-
-                                List<TeamPlayer> availablePlayers =
-                                        new ArrayList<>();
-
-
-                                for (TeamPlayer player :
-                                        ownedPlayers) {
-
-
-                                    /*
-                                     * Firebase formation uses
-                                     * player ID as the key.
-                                     *
-                                     * Therefore the same player
-                                     * cannot be selected twice.
-                                     */
-
-                                    if (!snapshot
-                                            .child(player.id)
-                                            .exists()) {
-
-
-                                        availablePlayers.add(
+                                        createFormationPlayerView(
                                                 player
                                         );
                                     }
                                 }
 
 
-                                if (availablePlayers.isEmpty()) {
+                                // ==========================================
+                                // REMOVE PLAYERS DELETED FROM FIREBASE
+                                // ==========================================
+
+                                List<String> localPlayerIds =
+                                        new ArrayList<>(
+
+                                                formationPlayers.keySet()
+
+                                        );
 
 
-                                    new AlertDialog.Builder(
-                                            requireContext()
-                                    )
-                                            .setTitle(
-                                                    "No Available Players"
-                                            )
-                                            .setMessage(
-                                                    "All your available players are already on the field."
-                                            )
-                                            .setPositiveButton(
-                                                    "OK",
-                                                    null
-                                            )
-                                            .show();
+                                for (String localId :
+                                        localPlayerIds) {
 
 
-                                    return;
-                                }
+                                    if (!firebasePlayerIds.contains(
+                                            localId
+                                    )) {
 
 
-                                String[] playerNames =
-                                        new String[
-                                                availablePlayers.size()
-                                                ];
+                                        formationPlayers.remove(
+                                                localId
+                                        );
 
 
-                                for (int i = 0;
-                                     i < availablePlayers.size();
-                                     i++) {
+                                        View removedView =
+                                                formationPlayerViews.remove(
+                                                        localId
+                                                );
 
 
-                                    TeamPlayer player =
-                                            availablePlayers.get(
-                                                    i
+                                        if (removedView != null &&
+                                                formationContainer != null) {
+
+
+                                            formationContainer.removeView(
+                                                    removedView
                                             );
-
-
-                                    playerNames[i] =
-                                            player.name
-                                                    + " • "
-                                                    + player.position;
+                                        }
+                                    }
                                 }
 
 
-                                new AlertDialog.Builder(
-                                        requireContext()
-                                )
-                                        .setTitle(
-                                                "Select Player"
-                                        )
-                                        .setItems(
-                                                playerNames,
-                                                (dialog, which) -> {
+                                formationLoaded =
+                                        true;
 
 
-                                                    TeamPlayer selectedPlayer =
-                                                            availablePlayers
-                                                                    .get(
-                                                                            which
-                                                                    );
+                                updateFormationCounter();
 
-
-                                                    addPlayerToFormation(
-                                                            selectedPlayer
-                                                    );
-
-                                                }
-                                        )
-                                        .setNegativeButton(
-                                                "CANCEL",
-                                                null
-                                        )
-                                        .show();
+                                updateEmptyState();
                             }
 
 
@@ -876,6 +1055,310 @@ public class FormationFragment extends Fragment {
                             }
                         }
                 );
+    }
+
+
+    // ==================================================
+    // SAFE DOUBLE FROM FIREBASE
+    // ==================================================
+
+    @Nullable
+    private Double getDoubleValue(
+            DataSnapshot snapshot
+    ) {
+
+        if (snapshot == null ||
+                !snapshot.exists()) {
+
+
+            return null;
+        }
+
+
+        Object value =
+                snapshot.getValue();
+
+
+        if (value == null) {
+
+
+            return null;
+        }
+
+
+        if (value instanceof Double) {
+
+
+            return (Double) value;
+        }
+
+
+        if (value instanceof Long) {
+
+
+            return ((Long) value)
+                    .doubleValue();
+        }
+
+
+        if (value instanceof Integer) {
+
+
+            return ((Integer) value)
+                    .doubleValue();
+        }
+
+
+        if (value instanceof Float) {
+
+
+            return ((Float) value)
+                    .doubleValue();
+        }
+
+
+        try {
+
+
+            return Double.parseDouble(
+
+                    String.valueOf(
+                            value
+                    )
+
+            );
+
+
+        } catch (NumberFormatException exception) {
+
+
+            return null;
+        }
+    }
+
+
+    // ==================================================
+    // SAFE LONG FROM FIREBASE
+    // ==================================================
+
+    @Nullable
+    private Long getLongValue(
+            DataSnapshot snapshot
+    ) {
+
+        if (snapshot == null ||
+                !snapshot.exists()) {
+
+
+            return null;
+        }
+
+
+        Object value =
+                snapshot.getValue();
+
+
+        if (value == null) {
+
+
+            return null;
+        }
+
+
+        if (value instanceof Long) {
+
+
+            return (Long) value;
+        }
+
+
+        if (value instanceof Integer) {
+
+
+            return ((Integer) value)
+                    .longValue();
+        }
+
+
+        if (value instanceof Double) {
+
+
+            return ((Double) value)
+                    .longValue();
+        }
+
+
+        if (value instanceof Float) {
+
+
+            return ((Float) value)
+                    .longValue();
+        }
+
+
+        try {
+
+
+            return Long.parseLong(
+
+                    String.valueOf(
+                            value
+                    )
+
+            );
+
+
+        } catch (NumberFormatException exception) {
+
+
+            return null;
+        }
+    }
+
+
+    // ==================================================
+    // SHOW ADD PLAYER DIALOG
+    // ==================================================
+
+    private void showAddPlayerDialog() {
+
+        if (!isAdded()) {
+
+            return;
+        }
+
+
+        if (formationSubmitted) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Formation already submitted",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        if (formationPlayers.size() >=
+                MAX_FORMATION_PLAYERS) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Formation already has 11 players",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        List<FormationPlayer> availablePlayers =
+                new ArrayList<>();
+
+
+        for (FormationPlayer player :
+                teamPlayers) {
+
+
+            if (player.id != null &&
+                    !formationPlayers.containsKey(
+                            player.id
+                    )) {
+
+
+                availablePlayers.add(
+                        player
+                );
+            }
+        }
+
+
+        if (availablePlayers.isEmpty()) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "No available players to add",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        String[] playerNames =
+                new String[
+                        availablePlayers.size()
+                        ];
+
+
+        for (int i = 0;
+             i < availablePlayers.size();
+             i++) {
+
+
+            FormationPlayer player =
+                    availablePlayers.get(
+                            i
+                    );
+
+
+            playerNames[i] =
+
+                    player.name
+
+                            + "  •  "
+
+                            + player.originalPosition;
+        }
+
+
+        new AlertDialog.Builder(
+                requireContext()
+        )
+
+                .setTitle(
+                        "Add Player"
+                )
+
+                .setItems(
+
+                        playerNames,
+
+                        (dialog, which) -> {
+
+
+                            if (which < 0 ||
+                                    which >= availablePlayers.size()) {
+
+
+                                return;
+                            }
+
+
+                            addPlayerToFormation(
+
+                                    availablePlayers.get(
+                                            which
+                                    )
+
+                            );
+                        }
+
+                )
+
+                .setNegativeButton(
+                        "CANCEL",
+                        null
+                )
+
+                .show();
     }
 
 
@@ -884,257 +1367,421 @@ public class FormationFragment extends Fragment {
     // ==================================================
 
     private void addPlayerToFormation(
-            TeamPlayer player
+            FormationPlayer sourcePlayer
     ) {
 
-        if (formationRef == null ||
+        if (sourcePlayer == null ||
+                sourcePlayer.id == null ||
                 formationContainer == null ||
-                player == null ||
-                player.id == null) {
+                formationSubmitted) {
+
 
             return;
         }
 
 
-        /*
-         * Extra duplicate protection.
-         *
-         * If this player already exists,
-         * do not overwrite/add another card.
-         */
-
-        formationRef
-                .child(player.id)
-                .addListenerForSingleValueEvent(
-
-                        new ValueEventListener() {
-
-                            @Override
-                            public void onDataChange(
-                                    @NonNull DataSnapshot snapshot
-                            ) {
-
-                                if (snapshot.exists() ||
-                                        formationContainer == null) {
-
-                                    return;
-                                }
+        if (formationPlayers.size() >=
+                MAX_FORMATION_PLAYERS) {
 
 
-                                float defaultX =
-                                        Math.max(
-                                                0,
-                                                formationContainer
-                                                        .getWidth()
-                                                        / 2f
-                                                        - dpToPx(40)
-                                        );
+            return;
+        }
 
 
-                                float defaultY =
-                                        Math.max(
-                                                0,
-                                                formationContainer
-                                                        .getHeight()
-                                                        / 2f
-                                                        - dpToPx(50)
-                                        );
+        if (formationPlayers.containsKey(
+                sourcePlayer.id
+        )) {
 
 
-                                /*
-                                 * Calculate formation position
-                                 * from where the card starts.
-                                 */
-
-                                String formationPosition =
-                                        calculateFormationPosition(
-                                                defaultX,
-                                                defaultY,
-                                                dpToPx(80),
-                                                dpToPx(105)
-                                        );
+            return;
+        }
 
 
-                                Map<String, Object> data =
-                                        new HashMap<>();
+        FormationPlayer player =
+                new FormationPlayer();
 
 
-                                data.put(
-                                        "playerId",
-                                        player.id
-                                );
+        player.id =
+                sourcePlayer.id;
 
 
-                                data.put(
-                                        "name",
-                                        player.name
-                                );
+        player.name =
+                sourcePlayer.name;
 
 
-                                /*
-                                 * Keep original position.
-                                 *
-                                 * Example:
-                                 * Messi original = RW
-                                 */
-
-                                data.put(
-                                        "originalPosition",
-                                        player.position
-                                );
-
-
-                                /*
-                                 * Formation position changes
-                                 * when the card moves.
-                                 */
-
-                                data.put(
-                                        "formationPosition",
-                                        formationPosition
-                                );
-
-
-                                data.put(
-                                        "type",
-                                        player.type
-                                );
-
-
-                                data.put(
-                                        "image",
-                                        player.image
-                                );
-
-
-                                data.put(
-                                        "x",
-                                        defaultX
-                                );
-
-
-                                data.put(
-                                        "y",
-                                        defaultY
-                                );
-
-
-                                formationRef
-                                        .child(player.id)
-                                        .setValue(
-                                                data
-                                        );
-                            }
-
-
-                            @Override
-                            public void onCancelled(
-                                    @NonNull DatabaseError error
-                            ) {
-
-                            }
-                        }
+        player.originalPosition =
+                normalizePosition(
+                        sourcePlayer.originalPosition
                 );
+
+
+        player.currentPosition =
+                player.originalPosition;
+
+
+        player.type =
+                sourcePlayer.type;
+
+
+        player.image =
+                sourcePlayer.image;
+
+
+        player.price =
+                sourcePlayer.price;
+
+
+        float[] coordinates =
+                getDefaultCoordinatesForPosition(
+
+                        player.originalPosition
+
+                );
+
+
+        player.x =
+                coordinates[0];
+
+
+        player.y =
+                coordinates[1];
+
+
+        formationPlayers.put(
+                player.id,
+                player
+        );
+
+
+        createFormationPlayerView(
+                player
+        );
+
+
+        updateFormationCounter();
+
+        updateEmptyState();
+
+
+        saveFormationPlayer(
+                player
+        );
     }
 
 
     // ==================================================
-    // CREATE PLAYER VIEW
+    // DEFAULT FIELD COORDINATES
+    //
+    // UNCHANGED FROM YOUR CURRENT CODE
+    // ==================================================
+
+    private float[] getDefaultCoordinatesForPosition(
+            String position
+    ) {
+
+        String normalized =
+                normalizePosition(
+                        position
+                );
+
+
+        switch (normalized) {
+
+
+            case "GK":
+
+                return new float[]{
+                        0.50f,
+                        1.00f
+                };
+
+
+            case "LB":
+
+                return new float[]{
+                        0.00f,
+                        0.70f
+                };
+
+
+            case "RB":
+
+                return new float[]{
+                        1.00f,
+                        0.70f
+                };
+
+
+            case "CB":
+
+                return new float[]{
+                        0.50f,
+                        0.72f
+                };
+
+
+            case "CDM":
+
+                return new float[]{
+                        0.50f,
+                        0.58f
+                };
+
+
+            case "CM":
+
+                return new float[]{
+                        0.50f,
+                        0.46f
+                };
+
+
+            case "CAM":
+
+                return new float[]{
+                        0.50f,
+                        0.30f
+                };
+
+
+            case "LW":
+
+                return new float[]{
+                        0.18f,
+                        0.20f
+                };
+
+
+            case "RW":
+
+                return new float[]{
+                        0.82f,
+                        0.20f
+                };
+
+
+            case "CF":
+
+                return new float[]{
+                        0.50f,
+                        0.23f
+                };
+
+
+            case "ST":
+
+                return new float[]{
+                        0.50f,
+                        0.12f
+                };
+
+
+            default:
+
+                return new float[]{
+                        0.50f,
+                        0.50f
+                };
+        }
+    }
+
+
+    // ==================================================
+    // NORMALIZE POSITION
+    // ==================================================
+
+    private String normalizePosition(
+            String position
+    ) {
+
+        if (position == null ||
+                position.trim().isEmpty()) {
+
+
+            return "CM";
+        }
+
+
+        String normalized =
+                position
+                        .trim()
+                        .toUpperCase();
+
+
+        switch (normalized) {
+
+
+            case "GOALKEEPER":
+
+                return "GK";
+
+
+            case "LEFT BACK":
+
+            case "LWB":
+
+                return "LB";
+
+
+            case "RIGHT BACK":
+
+            case "RWB":
+
+                return "RB";
+
+
+            case "CENTER BACK":
+
+            case "CENTRE BACK":
+
+                return "CB";
+
+
+            case "DEFENSIVE MIDFIELDER":
+
+            case "DM":
+
+                return "CDM";
+
+
+            case "CENTRAL MIDFIELDER":
+
+                return "CM";
+
+
+            case "ATTACKING MIDFIELDER":
+
+            case "AM":
+
+                return "CAM";
+
+
+            case "LEFT MIDFIELDER":
+
+            case "LEFT WINGER":
+
+            case "LM":
+
+                return "LW";
+
+
+            case "RIGHT MIDFIELDER":
+
+            case "RIGHT WINGER":
+
+            case "RM":
+
+                return "RW";
+
+
+            case "CENTER FORWARD":
+
+            case "CENTRE FORWARD":
+
+                return "CF";
+
+
+            case "STRIKER":
+
+            case "FORWARD":
+
+                return "ST";
+
+
+            default:
+
+                return normalized;
+        }
+    }
+
+
+    // ==================================================
+    // CREATE FORMATION PLAYER VIEW
+    //
+    // YOUR NO-DUPLICATE / NO-BLINK BEHAVIOR
+    // IS PRESERVED.
     // ==================================================
 
     private void createFormationPlayerView(
-            String footballerId,
-            String name,
-            String formationPosition,
-            String imageName,
-            float x,
-            float y
+            FormationPlayer player
     ) {
 
-        if (formationContainer == null ||
-                !isAdded()) {
+        if (!isAdded() ||
+                formationContainer == null ||
+                player == null ||
+                player.id == null) {
+
 
             return;
         }
 
 
-        // ==================================================
-        // PLAYER CARD CONTAINER
-        // ==================================================
-
-        LinearLayout playerView =
-                new LinearLayout(
-                        requireContext()
-                );
+        if (formationPlayerViews.containsKey(
+                player.id
+        )) {
 
 
-        playerView.setOrientation(
-                LinearLayout.VERTICAL
-        );
+            return;
+        }
 
 
-        playerView.setGravity(
-                Gravity.CENTER
-        );
+        View playerView =
+                LayoutInflater
+                        .from(
+                                requireContext()
+                        )
+                        .inflate(
+                                R.layout.item_formation_player,
+                                formationContainer,
+                                false
+                        );
 
-
-        playerView.setTag(
-                "formation_player"
-        );
-
-
-        FrameLayout.LayoutParams playerParams =
-                new FrameLayout.LayoutParams(
-                        dpToPx(80),
-                        dpToPx(105)
-                );
-
-
-        playerView.setLayoutParams(
-                playerParams
-        );
-
-
-        // ==================================================
-        // PLAYER IMAGE
-        // ==================================================
 
         ImageView imageView =
-                new ImageView(
-                        requireContext()
+                playerView.findViewById(
+                        R.id.imgFormationPlayer
                 );
 
 
-        LinearLayout.LayoutParams imageParams =
-                new LinearLayout.LayoutParams(
-                        dpToPx(64),
-                        dpToPx(64)
+        TextView nameView =
+                playerView.findViewById(
+                        R.id.txtFormationPlayerName
                 );
 
 
-        imageView.setLayoutParams(
-                imageParams
-        );
+        TextView positionView =
+                playerView.findViewById(
+                        R.id.txtFormationPlayerPosition
+                );
 
 
-        imageView.setScaleType(
-                ImageView.ScaleType.FIT_CENTER
-        );
+        if (nameView != null) {
 
 
-        imageView.setAdjustViewBounds(
-                true
-        );
+            nameView.setText(
+                    player.name
+            );
+        }
 
 
-        if (imageName != null &&
-                !imageName.trim().isEmpty()) {
+        if (positionView != null) {
+
+
+            positionView.setText(
+                    player.currentPosition
+            );
+        }
+
+
+        if (imageView != null &&
+                player.image != null &&
+                !player.image.trim().isEmpty()) {
 
 
             int imageResource =
                     getResources()
                             .getIdentifier(
-                                    imageName,
+                                    player.image,
                                     "drawable",
                                     requireContext()
                                             .getPackageName()
@@ -1143,6 +1790,7 @@ public class FormationFragment extends Fragment {
 
             if (imageResource != 0) {
 
+
                 imageView.setImageResource(
                         imageResource
                 );
@@ -1150,200 +1798,179 @@ public class FormationFragment extends Fragment {
         }
 
 
-        playerView.addView(
-                imageView
-        );
-
-
-        // ==================================================
-        // PLAYER NAME
-        // ==================================================
-
-        TextView nameView =
-                new TextView(
-                        requireContext()
-                );
-
-
-        nameView.setText(
-                getShortPlayerName(
-                        name
-                )
-        );
-
-
-        nameView.setTextColor(
-                Color.WHITE
-        );
-
-
-        nameView.setTextSize(
-                13
-        );
-
-
-        nameView.setGravity(
-                Gravity.CENTER
-        );
-
-
-        nameView.setSingleLine(
-                true
-        );
-
-
-        nameView.setTypeface(
-                ResourcesCompat.getFont(
-                        requireContext(),
-                        R.font.bebas_neue
-                )
-        );
-
-
-        nameView.setShadowLayer(
-                4f,
-                0f,
-                2f,
-                Color.BLACK
-        );
-
-
-        playerView.addView(
-                nameView
-        );
-
-
-        // ==================================================
-        // DYNAMIC POSITION
-        // ==================================================
-
-        TextView positionView =
-                new TextView(
-                        requireContext()
-                );
-
-
-        positionView.setText(
-                formationPosition != null
-                        ? formationPosition.toUpperCase()
-                        : "CM"
-        );
-
-
-        positionView.setTextColor(
-                Color.parseColor(
-                        "#D4AF37"
-                )
-        );
-
-
-        positionView.setTextSize(
-                11
-        );
-
-
-        positionView.setGravity(
-                Gravity.CENTER
-        );
-
-
-        positionView.setTypeface(
-                ResourcesCompat.getFont(
-                        requireContext(),
-                        R.font.bebas_neue
-                )
-        );
-
-
-        playerView.addView(
-                positionView
-        );
-
-
-        // ==================================================
-        // ADD CARD TO FIELD
-        // ==================================================
-
         formationContainer.addView(
                 playerView
         );
 
 
-        // ==================================================
-        // RESTORE SAVED POSITION
-        // ==================================================
-
-        playerView.post(() -> {
-
-            if (formationContainer == null) {
-                return;
-            }
+        formationPlayerViews.put(
+                player.id,
+                playerView
+        );
 
 
-            float maxX =
-                    Math.max(
-                            0,
-                            formationContainer.getWidth()
-                                    - playerView.getWidth()
-                    );
+        playerView.post(
+
+                () -> {
 
 
-            float maxY =
-                    Math.max(
-                            0,
-                            formationContainer.getHeight()
-                                    - playerView.getHeight()
-                    );
+                    if (isAdded() &&
+                            formationContainer != null &&
+                            playerView.getParent() != null) {
 
 
-            playerView.setX(
-                    Math.max(
-                            0,
-                            Math.min(
-                                    x,
-                                    maxX
-                            )
-                    )
-            );
+                        placePlayerView(
+                                playerView,
+                                player
+                        );
+                    }
+                }
+
+        );
 
 
-            playerView.setY(
-                    Math.max(
-                            0,
-                            Math.min(
-                                    y,
-                                    maxY
-                            )
-                    )
-            );
-        });
-
-
-        // ==================================================
-        // ENABLE DRAGGING
-        // ==================================================
-
-        makePlayerDraggable(
+        enablePlayerDragging(
                 playerView,
-                positionView,
-                footballerId
+                player,
+                positionView
+        );
+
+
+        playerView.setOnLongClickListener(
+
+                v -> {
+
+
+                    showRemovePlayerDialog(
+                            player
+                    );
+
+
+                    return true;
+                }
+
         );
     }
 
 
     // ==================================================
-    // MAKE PLAYER DRAGGABLE
+    // PLACE PLAYER ON FIELD
+    //
+    // UNCHANGED
     // ==================================================
 
-    private void makePlayerDraggable(
+    private void placePlayerView(
             View playerView,
-            TextView positionView,
-            String footballerId
+            FormationPlayer player
     ) {
+
+        if (formationContainer == null ||
+                playerView == null ||
+                player == null) {
+
+
+            return;
+        }
+
+
+        int containerWidth =
+                formationContainer.getWidth();
+
+
+        int containerHeight =
+                formationContainer.getHeight();
+
+
+        if (containerWidth <= 0 ||
+                containerHeight <= 0 ||
+                playerView.getWidth() <= 0 ||
+                playerView.getHeight() <= 0) {
+
+
+            return;
+        }
+
+
+        if (player.x < 0f ||
+                player.x > 1f ||
+                player.y < 0f ||
+                player.y > 1f) {
+
+
+            float[] coordinates =
+                    getDefaultCoordinatesForPosition(
+
+                            player.originalPosition
+
+                    );
+
+
+            player.x =
+                    coordinates[0];
+
+
+            player.y =
+                    coordinates[1];
+        }
+
+
+        float maxX =
+                Math.max(
+
+                        0f,
+
+                        containerWidth
+                                - playerView.getWidth()
+
+                );
+
+
+        float maxY =
+                Math.max(
+
+                        0f,
+
+                        containerHeight
+                                - playerView.getHeight()
+
+                );
+
+
+        playerView.setX(
+
+                player.x * maxX
+
+        );
+
+
+        playerView.setY(
+
+                player.y * maxY
+
+        );
+    }
+
+    // ==================================================
+    // ENABLE SMOOTH PLAYER DRAGGING
+    // ==================================================
+
+    private void enablePlayerDragging(
+            View playerView,
+            FormationPlayer player,
+            TextView positionView
+    ) {
+
+        if (playerView == null ||
+                player == null) {
+
+            return;
+        }
+
 
         playerView.setOnTouchListener(
 
                 new View.OnTouchListener() {
+
 
                     private float touchOffsetX;
                     private float touchOffsetY;
@@ -1351,7 +1978,7 @@ public class FormationFragment extends Fragment {
                     private float downRawX;
                     private float downRawY;
 
-                    private boolean moved;
+                    private boolean dragging = false;
 
 
                     @Override
@@ -1360,7 +1987,9 @@ public class FormationFragment extends Fragment {
                             MotionEvent event
                     ) {
 
-                        if (formationContainer == null) {
+                        if (formationSubmitted ||
+                                formationContainer == null) {
+
                             return false;
                         }
 
@@ -1368,11 +1997,10 @@ public class FormationFragment extends Fragment {
                         switch (event.getActionMasked()) {
 
 
-                            // ==================================================
-                            // START DRAG
-                            // ==================================================
-
                             case MotionEvent.ACTION_DOWN:
+
+
+                                dragging = false;
 
 
                                 downRawX =
@@ -1384,67 +2012,24 @@ public class FormationFragment extends Fragment {
 
 
                                 touchOffsetX =
-                                        view.getX()
-                                                - event.getRawX();
+                                        event.getX();
 
 
                                 touchOffsetY =
-                                        view.getY()
-                                                - event.getRawY();
-
-
-                                moved =
-                                        false;
-
-
-                                playerBeingDragged =
-                                        true;
-
-
-                                /*
-                                 * Stop ViewPager from stealing
-                                 * horizontal drag gestures.
-                                 */
-
-                                setViewPagerSwipeEnabled(
-                                        false
-                                );
-
-
-                                /*
-                                 * Ask parent views not to
-                                 * intercept this touch.
-                                 */
-
-                                if (view.getParent() != null) {
-
-                                    view.getParent()
-                                            .requestDisallowInterceptTouchEvent(
-                                                    true
-                                            );
-                                }
+                                        event.getY();
 
 
                                 view.bringToFront();
 
 
-                                /*
-                                 * Small visual feedback.
-                                 */
-
-                                view.animate()
-                                        .scaleX(1.08f)
-                                        .scaleY(1.08f)
-                                        .setDuration(100)
-                                        .start();
+                                disallowParentIntercept(
+                                        view,
+                                        true
+                                );
 
 
                                 return true;
 
-
-                            // ==================================================
-                            // MOVE CARD
-                            // ==================================================
 
                             case MotionEvent.ACTION_MOVE:
 
@@ -1463,54 +2048,74 @@ public class FormationFragment extends Fragment {
                                         );
 
 
-                                /*
-                                 * Small movement threshold.
-                                 *
-                                 * Prevents tiny finger movement
-                                 * from counting as a full drag.
-                                 */
+                                if (distanceX > 5f ||
+                                        distanceY > 5f) {
 
-                                if (distanceX > dpToPx(3) ||
-                                        distanceY > dpToPx(3)) {
 
-                                    moved =
-                                            true;
+                                    dragging = true;
                                 }
 
 
+                                if (!dragging) {
+
+
+                                    return true;
+                                }
+
+
+                                disallowParentIntercept(
+                                        view,
+                                        true
+                                );
+
+
+                                int[] containerLocation =
+                                        new int[2];
+
+
+                                formationContainer
+                                        .getLocationOnScreen(
+                                                containerLocation
+                                        );
+
+
                                 float newX =
+
                                         event.getRawX()
-                                                + touchOffsetX;
+
+                                                - containerLocation[0]
+
+                                                - touchOffsetX;
 
 
                                 float newY =
+
                                         event.getRawY()
-                                                + touchOffsetY;
+
+                                                - containerLocation[1]
+
+                                                - touchOffsetY;
 
 
                                 float maxX =
                                         Math.max(
-                                                0,
-                                                formationContainer
-                                                        .getWidth()
+                                                0f,
+                                                formationContainer.getWidth()
                                                         - view.getWidth()
                                         );
 
 
                                 float maxY =
                                         Math.max(
-                                                0,
-                                                formationContainer
-                                                        .getHeight()
+                                                0f,
+                                                formationContainer.getHeight()
                                                         - view.getHeight()
                                         );
 
 
-                                // Keep card inside field
-
                                 newX =
                                         Math.max(
-                                                0,
+                                                0f,
                                                 Math.min(
                                                         newX,
                                                         maxX
@@ -1520,7 +2125,7 @@ public class FormationFragment extends Fragment {
 
                                 newY =
                                         Math.max(
-                                                0,
+                                                0f,
                                                 Math.min(
                                                         newY,
                                                         maxY
@@ -1528,11 +2133,9 @@ public class FormationFragment extends Fragment {
                                         );
 
 
-                                /*
-                                 * Direct X/Y updates give
-                                 * smoother dragging than
-                                 * repeatedly running animations.
-                                 */
+                                // IMPORTANT:
+                                // Smooth local movement only.
+                                // No Firebase write while dragging.
 
                                 view.setX(
                                         newX
@@ -1544,23 +2147,34 @@ public class FormationFragment extends Fragment {
                                 );
 
 
-                                // ==========================================
-                                // UPDATE POSITION LIVE
-                                // ==========================================
+                                player.x =
+                                        maxX > 0f
 
-                                String livePosition =
+                                                ? newX / maxX
+
+                                                : 0.5f;
+
+
+                                player.y =
+                                        maxY > 0f
+
+                                                ? newY / maxY
+
+                                                : 0.5f;
+
+
+                                player.currentPosition =
                                         calculateFormationPosition(
-                                                newX,
-                                                newY,
-                                                view.getWidth(),
-                                                view.getHeight()
+                                                player.x,
+                                                player.y
                                         );
 
 
                                 if (positionView != null) {
 
+
                                     positionView.setText(
-                                            livePosition
+                                            player.currentPosition
                                     );
                                 }
 
@@ -1568,43 +2182,70 @@ public class FormationFragment extends Fragment {
                                 return true;
 
 
-                            // ==================================================
-                            // RELEASE CARD
-                            // ==================================================
-
                             case MotionEvent.ACTION_UP:
 
 
-                                finishPlayerDrag(
+                                disallowParentIntercept(
                                         view,
-                                        positionView,
-                                        footballerId,
-                                        moved
+                                        false
                                 );
+
+
+                                if (dragging) {
+
+
+                                    player.currentPosition =
+                                            calculateFormationPosition(
+                                                    player.x,
+                                                    player.y
+                                            );
+
+
+                                    if (positionView != null) {
+
+
+                                        positionView.setText(
+                                                player.currentPosition
+                                        );
+                                    }
+
+
+                                    // Save only after release.
+                                    saveFormationPlayer(
+                                            player
+                                    );
+
+
+                                } else {
+
+
+                                    view.performClick();
+                                }
+
+
+                                dragging = false;
 
 
                                 return true;
 
 
-                            // ==================================================
-                            // DRAG CANCELLED
-                            // ==================================================
-
                             case MotionEvent.ACTION_CANCEL:
 
 
-                                finishPlayerDrag(
+                                disallowParentIntercept(
                                         view,
-                                        positionView,
-                                        footballerId,
-                                        moved
+                                        false
                                 );
+
+
+                                dragging = false;
 
 
                                 return true;
 
 
                             default:
+
 
                                 return false;
                         }
@@ -1615,183 +2256,67 @@ public class FormationFragment extends Fragment {
 
 
     // ==================================================
-    // FINISH PLAYER DRAG
+    // PREVENT PARENT FROM STEALING DRAG
     // ==================================================
 
-    private void finishPlayerDrag(
+    private void disallowParentIntercept(
             View view,
-            TextView positionView,
-            String footballerId,
-            boolean moved
+            boolean disallow
     ) {
 
+        if (view == null) {
 
-        // Restore card size
-
-        view.animate()
-                .scaleX(1f)
-                .scaleY(1f)
-                .setDuration(100)
-                .start();
-
-
-        // Allow parent touch handling again
-
-        if (view.getParent() != null) {
-
-            view.getParent()
-                    .requestDisallowInterceptTouchEvent(
-                            false
-                    );
+            return;
         }
 
 
-        // Re-enable ViewPager swipe
-
-        setViewPagerSwipeEnabled(
-                true
-        );
+        android.view.ViewParent parent =
+                view.getParent();
 
 
-        if (moved) {
+        while (parent != null) {
 
 
-            String formationPosition =
-                    calculateFormationPosition(
-                            view.getX(),
-                            view.getY(),
-                            view.getWidth(),
-                            view.getHeight()
-                    );
-
-
-            if (positionView != null) {
-
-                positionView.setText(
-                        formationPosition
-                );
-            }
-
-
-            /*
-             * Save only when finger is released.
-             *
-             * This avoids sending dozens of
-             * Firebase writes during dragging.
-             */
-
-            savePlayerPosition(
-                    footballerId,
-                    view.getX(),
-                    view.getY(),
-                    formationPosition
+            parent.requestDisallowInterceptTouchEvent(
+                    disallow
             );
+
+
+            parent =
+                    parent.getParent();
         }
-
-
-        /*
-         * Delay slightly so our Firebase listener
-         * does not rebuild cards before the final
-         * position write has completed.
-         */
-
-        view.postDelayed(
-                () -> playerBeingDragged = false,
-                150
-        );
     }
 
 
     // ==================================================
-    // CALCULATE FORMATION POSITION
+    // CALCULATE POSITION FROM FIELD LOCATION
     // ==================================================
 
     private String calculateFormationPosition(
-            float cardX,
-            float cardY,
-            int cardWidth,
-            int cardHeight
+            float x,
+            float y
     ) {
 
-        if (formationContainer == null ||
-                formationContainer.getWidth() <= 0 ||
-                formationContainer.getHeight() <= 0) {
 
-            return "CM";
-        }
+        if (y >= 0.85f) {
 
-
-        /*
-         * Use the CENTER of the player card.
-         */
-
-        float centerX =
-                cardX
-                        + cardWidth / 2f;
-
-
-        float centerY =
-                cardY
-                        + cardHeight / 2f;
-
-
-        /*
-         * Convert coordinates to percentages.
-         *
-         * xRatio:
-         * 0.0 = far left
-         * 1.0 = far right
-         *
-         * yRatio:
-         * 0.0 = top
-         * 1.0 = bottom
-         *
-         * IMPORTANT:
-         *
-         * This assumes your attacking goal
-         * is at the TOP of the field PNG.
-         *
-         * If your attacking direction is
-         * bottom-to-top reversed, we can
-         * flip this logic later.
-         */
-
-        float xRatio =
-                centerX
-                        / formationContainer.getWidth();
-
-
-        float yRatio =
-                centerY
-                        / formationContainer.getHeight();
-
-
-        // ==================================================
-        // GOALKEEPER ZONE
-        // Bottom 13%
-        // ==================================================
-
-        if (yRatio >= 0.87f) {
 
             return "GK";
         }
 
 
-        // ==================================================
-        // DEFENCE ZONE
-        // 68% - 87%
-        // ==================================================
-
-        if (yRatio >= 0.68f) {
+        if (y >= 0.65f) {
 
 
-            if (xRatio < 0.25f) {
+            if (x < 0.20f) {
+
 
                 return "LB";
             }
 
 
-            if (xRatio > 0.75f) {
+            if (x > 0.80f) {
+
 
                 return "RB";
             }
@@ -1801,69 +2326,32 @@ public class FormationFragment extends Fragment {
         }
 
 
-        // ==================================================
-        // DEFENSIVE MIDFIELD
-        // 55% - 68%
-        // ==================================================
-
-        if (yRatio >= 0.55f) {
-
-
-            if (xRatio < 0.25f) {
-
-                return "LM";
-            }
-
-
-            if (xRatio > 0.75f) {
-
-                return "RM";
-            }
+        if (y >= 0.53f) {
 
 
             return "CDM";
         }
 
 
-        // ==================================================
-        // CENTRAL MIDFIELD
-        // 38% - 55%
-        // ==================================================
-
-        if (yRatio >= 0.38f) {
-
-
-            if (xRatio < 0.25f) {
-
-                return "LM";
-            }
-
-
-            if (xRatio > 0.75f) {
-
-                return "RM";
-            }
+        if (y >= 0.40f) {
 
 
             return "CM";
         }
 
 
-        // ==================================================
-        // ATTACKING MIDFIELD
-        // 25% - 38%
-        // ==================================================
-
-        if (yRatio >= 0.25f) {
+        if (y >= 0.26f) {
 
 
-            if (xRatio < 0.25f) {
+            if (x < 0.25f) {
+
 
                 return "LW";
             }
 
 
-            if (xRatio > 0.75f) {
+            if (x > 0.75f) {
+
 
                 return "RW";
             }
@@ -1873,122 +2361,395 @@ public class FormationFragment extends Fragment {
         }
 
 
-        // ==================================================
-        // FORWARD / ATTACK ZONE
-        // Top 25%
-        // ==================================================
+        if (x < 0.33f) {
 
-        if (xRatio < 0.30f) {
 
             return "LW";
         }
 
 
-        if (xRatio > 0.70f) {
+        if (x > 0.67f) {
+
 
             return "RW";
         }
 
 
-        /*
-         * Central forward position.
-         *
-         * Slightly deeper = CF
-         * Very high = ST
-         */
-
-        if (yRatio < 0.12f) {
-
-            return "ST";
-        }
-
-
-        return "CF";
+        return "ST";
     }
 
 
     // ==================================================
-    // ENABLE / DISABLE VIEWPAGER SWIPE
+    // SAVE FORMATION PLAYER
     // ==================================================
 
-    private void setViewPagerSwipeEnabled(
-            boolean enabled
+    private void saveFormationPlayer(
+            FormationPlayer player
     ) {
 
-        if (!isAdded()) {
+        if (formationRef == null ||
+                player == null ||
+                player.id == null ||
+                player.id.trim().isEmpty()) {
+
+
             return;
         }
 
 
-        /*
-         * Search upward through parent views
-         * until we find the ViewPager2.
-         */
-
-        View currentView =
-                getView();
+        Map<String, Object> playerData =
+                new HashMap<>();
 
 
-        if (currentView == null) {
+        playerData.put(
+                "id",
+                player.id
+        );
+
+
+        playerData.put(
+                "name",
+                player.name
+        );
+
+
+        playerData.put(
+                "originalPosition",
+                player.originalPosition
+        );
+
+
+        playerData.put(
+                "position",
+                player.currentPosition
+        );
+
+
+        playerData.put(
+                "type",
+                player.type
+        );
+
+
+        playerData.put(
+                "image",
+                player.image
+        );
+
+
+        playerData.put(
+                "price",
+                player.price
+        );
+
+
+        playerData.put(
+                "x",
+                player.x
+        );
+
+
+        playerData.put(
+                "y",
+                player.y
+        );
+
+
+        formationRef
+                .child(
+                        player.id
+                )
+                .updateChildren(
+                        playerData
+                );
+    }
+
+
+    // ==================================================
+    // REMOVE PLAYER DIALOG
+    // ==================================================
+
+    private void showRemovePlayerDialog(
+            FormationPlayer player
+    ) {
+
+        if (!isAdded() ||
+                player == null ||
+                formationSubmitted) {
+
+
             return;
         }
 
 
-        ViewParentSearch:
+        String displayName =
+                player.name != null
 
-        while (currentView.getParent() != null) {
+                        ? player.name
 
-
-            if (currentView.getParent()
-                    instanceof ViewPager2) {
-
-
-                ViewPager2 viewPager =
-                        (ViewPager2)
-                                currentView.getParent();
+                        : "this player";
 
 
-                viewPager.setUserInputEnabled(
-                        enabled
+        new AlertDialog.Builder(
+                requireContext()
+        )
+
+                .setTitle(
+                        "Remove Player?"
+                )
+
+                .setMessage(
+                        "Remove "
+                                + displayName
+                                + " from your formation?"
+                )
+
+                .setNegativeButton(
+                        "CANCEL",
+                        null
+                )
+
+                .setPositiveButton(
+                        "REMOVE",
+                        (dialog, which) ->
+                                removePlayerFromFormation(
+                                        player
+                                )
+                )
+
+                .show();
+    }
+
+
+    // ==================================================
+    // REMOVE PLAYER
+    // ==================================================
+
+    private void removePlayerFromFormation(
+            FormationPlayer player
+    ) {
+
+        if (player == null ||
+                player.id == null ||
+                formationSubmitted) {
+
+
+            return;
+        }
+
+
+        String id =
+                player.id;
+
+
+        formationPlayers.remove(
+                id
+        );
+
+
+        View playerView =
+                formationPlayerViews.remove(
+                        id
                 );
 
 
-                break ViewParentSearch;
-            }
+        if (formationContainer != null &&
+                playerView != null) {
 
 
-            if (currentView.getParent()
-                    instanceof View) {
+            formationContainer.removeView(
+                    playerView
+            );
+        }
 
 
-                currentView =
-                        (View)
-                                currentView.getParent();
+        updateFormationCounter();
 
-            } else {
+        updateEmptyState();
+
+
+        if (formationRef != null) {
+
+
+            formationRef
+                    .child(
+                            id
+                    )
+                    .removeValue();
+        }
+    }
+
+
+    // ==================================================
+    // UPDATE COUNTER
+    // ==================================================
+
+    private void updateFormationCounter() {
+
+        if (txtFormationPlayerCount == null) {
+
+
+            return;
+        }
+
+
+        txtFormationPlayerCount.setText(
+
+                formationPlayers.size()
+
+                        + " / "
+
+                        + MAX_FORMATION_PLAYERS
+
+        );
+    }
+
+
+    // ==================================================
+    // EMPTY STATE
+    // ==================================================
+
+    private void updateEmptyState() {
+
+        if (txtEmptyFormation == null) {
+
+
+            return;
+        }
+
+
+        txtEmptyFormation.setVisibility(
+
+                formationPlayers.isEmpty()
+
+                        ? View.VISIBLE
+
+                        : View.GONE
+
+        );
+    }
+
+
+    // ==================================================
+    // SUBMIT FORMATION
+    // ==================================================
+
+    private void submitFormation() {
+
+        if (!isAdded() ||
+                myPlayerRef == null ||
+                roomRef == null) {
+
+
+            return;
+        }
+
+
+        if (formationSubmitted) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Formation already submitted",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        if (formationPlayers.size() !=
+                MAX_FORMATION_PLAYERS) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Add all 11 players before submitting",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        boolean hasGoalkeeper =
+                false;
+
+
+        for (FormationPlayer player :
+                formationPlayers.values()) {
+
+
+            if ("GK".equals(
+                    player.currentPosition
+            )) {
+
+
+                hasGoalkeeper = true;
 
                 break;
             }
         }
+
+
+        if (!hasGoalkeeper) {
+
+
+            Toast.makeText(
+                    requireContext(),
+                    "Your formation needs a goalkeeper",
+                    Toast.LENGTH_SHORT
+            ).show();
+
+
+            return;
+        }
+
+
+        new AlertDialog.Builder(
+                requireContext()
+        )
+
+                .setTitle(
+                        "Submit Formation?"
+                )
+
+                .setMessage(
+                        "Your final formation will be submitted. "
+                                + "Make sure all 11 players are positioned correctly."
+                )
+
+                .setNegativeButton(
+                        "CANCEL",
+                        null
+                )
+
+                .setPositiveButton(
+                        "SUBMIT",
+                        (dialog, which) ->
+                                confirmFormationSubmission()
+                )
+
+                .show();
     }
 
 
     // ==================================================
-    // SAVE PLAYER POSITION + FORMATION ROLE
+    // CONFIRM SUBMISSION
     // ==================================================
 
-    private void savePlayerPosition(
-            String footballerId,
-            float x,
-            float y,
-            String formationPosition
-    ) {
+    private void confirmFormationSubmission() {
 
-        if (formationRef == null ||
-                footballerId == null) {
+        if (myPlayerRef == null) {
+
 
             return;
         }
+
+
+        formationSubmitted = true;
 
 
         Map<String, Object> updates =
@@ -1996,265 +2757,958 @@ public class FormationFragment extends Fragment {
 
 
         updates.put(
-                "x",
-                x
+                "formationSubmitted",
+                true
         );
 
 
         updates.put(
-                "y",
-                y
+                "formationSubmittedAt",
+                System.currentTimeMillis()
         );
 
 
-        updates.put(
-                "formationPosition",
-                formationPosition
-        );
-
-
-        formationRef
-                .child(footballerId)
+        myPlayerRef
                 .updateChildren(
                         updates
+                )
+
+                .addOnSuccessListener(
+
+                        unused -> {
+
+
+                            if (!isAdded()) {
+
+
+                                return;
+                            }
+
+
+                            Toast.makeText(
+                                    requireContext(),
+                                    "Formation submitted. Waiting for other managers...",
+                                    Toast.LENGTH_SHORT
+                            ).show();
+
+
+                            if (btnAddFormationPlayer != null) {
+
+
+                                btnAddFormationPlayer.setEnabled(
+                                        false
+                                );
+
+
+                                btnAddFormationPlayer.setAlpha(
+                                        0.4f
+                                );
+                            }
+
+
+                            if (btnSubmitFormation != null) {
+
+
+                                btnSubmitFormation.setEnabled(
+                                        false
+                                );
+
+
+                                btnSubmitFormation.setAlpha(
+                                        0.4f
+                                );
+                            }
+
+
+                            // Optional immediate host check.
+                            // Continuous listener below handles the
+                            // case where host submitted first.
+
+                            if (isHost) {
+
+
+                                checkAllFormationsSubmitted();
+                            }
+                        }
+
+                )
+
+                .addOnFailureListener(
+
+                        error -> {
+
+
+                            formationSubmitted = false;
+
+
+                            if (isAdded()) {
+
+
+                                Toast.makeText(
+                                        requireContext(),
+                                        "Failed to submit formation",
+                                        Toast.LENGTH_SHORT
+                                ).show();
+                            }
+                        }
+
                 );
     }
 
 
     // ==================================================
-    // REMOVE DYNAMIC PLAYER VIEWS
+    // NEW:
+    // HOST CONTINUOUSLY WATCHES ALL SUBMISSIONS
+    //
+    // Fixes:
+    // HOST submits first
+    // GUEST submits later
+    // Host now detects guest submission automatically.
     // ==================================================
 
-    private void removeFormationPlayerViews() {
+    private void listenToAllFormationSubmissions() {
 
-        if (formationContainer == null) {
+        if (!isHost ||
+                roomRef == null) {
+
+
             return;
         }
 
 
-        for (int i =
-             formationContainer.getChildCount() - 1;
-             i >= 0;
-             i--) {
+        playersSubmissionListener =
+                roomRef
+                        .child(
+                                "players"
+                        )
+                        .addValueEventListener(
+
+                                new ValueEventListener() {
 
 
-            View child =
-                    formationContainer.getChildAt(
-                            i
-                    );
+                                    @Override
+                                    public void onDataChange(
+                                            @NonNull DataSnapshot snapshot
+                                    ) {
 
 
-            Object tag =
-                    child.getTag();
+                                        checkSubmissionSnapshot(
+                                                snapshot
+                                        );
+                                    }
 
 
-            if ("formation_player".equals(
-                    tag
+                                    @Override
+                                    public void onCancelled(
+                                            @NonNull DatabaseError error
+                                    ) {
+
+                                    }
+                                }
+                        );
+    }
+
+
+    // ==================================================
+    // SINGLE CHECK
+    // ==================================================
+
+    private void checkAllFormationsSubmitted() {
+
+        if (!isHost ||
+                roomRef == null) {
+
+
+            return;
+        }
+
+
+        roomRef
+                .child(
+                        "players"
+                )
+                .addListenerForSingleValueEvent(
+
+                        new ValueEventListener() {
+
+
+                            @Override
+                            public void onDataChange(
+                                    @NonNull DataSnapshot snapshot
+                            ) {
+
+
+                                checkSubmissionSnapshot(
+                                        snapshot
+                                );
+                            }
+
+
+                            @Override
+                            public void onCancelled(
+                                    @NonNull DatabaseError error
+                            ) {
+
+                            }
+                        }
+                );
+    }
+
+
+    // ==================================================
+    // CHECK SUBMISSION SNAPSHOT
+    // ==================================================
+
+    private void checkSubmissionSnapshot(
+            DataSnapshot snapshot
+    ) {
+
+        if (!isHost ||
+                resultCalculationStarted) {
+
+
+            return;
+        }
+
+
+        int totalManagers = 0;
+
+        int submittedManagers = 0;
+
+
+        for (DataSnapshot managerSnapshot :
+                snapshot.getChildren()) {
+
+
+            totalManagers++;
+
+
+            Boolean submitted =
+                    managerSnapshot
+                            .child(
+                                    "formationSubmitted"
+                            )
+                            .getValue(
+                                    Boolean.class
+                            );
+
+
+            if (Boolean.TRUE.equals(
+                    submitted
             )) {
 
 
-                formationContainer.removeViewAt(
-                        i
-                );
-            }
-        }
-    }
-
-
-    // ==================================================
-    // UPDATE UI
-    // ==================================================
-
-    private void updateFormationUI() {
-
-        if (txtFormationPlayerCount != null) {
-
-
-            txtFormationPlayerCount.setText(
-                    formationPlayerCount
-                            + " / "
-                            + MAX_FORMATION_PLAYERS
-            );
-        }
-
-
-        if (txtEmptyFormation != null) {
-
-
-            if (formationPlayerCount == 0) {
-
-
-                txtEmptyFormation.setVisibility(
-                        View.VISIBLE
-                );
-
-
-            } else {
-
-
-                txtEmptyFormation.setVisibility(
-                        View.GONE
-                );
+                submittedManagers++;
             }
         }
 
 
-        if (btnAddFormationPlayer != null) {
+        if (totalManagers >= 2 &&
+                submittedManagers == totalManagers) {
 
 
-            boolean canAdd =
-                    formationPlayerCount
-                            < MAX_FORMATION_PLAYERS;
+            resultCalculationStarted = true;
 
 
-            btnAddFormationPlayer.setEnabled(
-                    canAdd
-            );
-
-
-            btnAddFormationPlayer.setAlpha(
-                    canAdd
-                            ? 1f
-                            : 0.4f
+            onAllFormationsSubmitted(
+                    snapshot
             );
         }
     }
 
 
     // ==================================================
-    // SHORT PLAYER NAME
+    // ALL FORMATIONS SUBMITTED
     // ==================================================
 
-    private String getShortPlayerName(
-            String name
+    private void onAllFormationsSubmitted(
+            DataSnapshot playersSnapshot
     ) {
 
-        if (name == null ||
-                name.trim().isEmpty()) {
+        if (!isHost ||
+                roomRef == null) {
 
 
-            return "PLAYER";
+            resultCalculationStarted = false;
+
+            return;
         }
 
 
-        String cleanName =
-                name.trim();
+        // First check whether a result already exists.
+        // This avoids overwriting an existing winner.
+
+        roomRef
+                .child(
+                        "matchResult"
+                )
+                .addListenerForSingleValueEvent(
+
+                        new ValueEventListener() {
 
 
-        String[] parts =
-                cleanName.split(
-                        "\\s+"
+                            @Override
+                            public void onDataChange(
+                                    @NonNull DataSnapshot resultSnapshot
+                            ) {
+
+
+                                Boolean alreadyCompleted =
+                                        resultSnapshot
+                                                .child(
+                                                        "completed"
+                                                )
+                                                .getValue(
+                                                        Boolean.class
+                                                );
+
+
+                                if (Boolean.TRUE.equals(
+                                        alreadyCompleted
+                                )) {
+
+
+                                    return;
+                                }
+
+
+                                calculateAndSaveResult(
+                                        playersSnapshot
+                                );
+                            }
+
+
+                            @Override
+                            public void onCancelled(
+                                    @NonNull DatabaseError error
+                            ) {
+
+
+                                resultCalculationStarted = false;
+                            }
+                        }
                 );
-
-
-        if (parts.length == 1) {
-
-
-            return parts[0]
-                    .toUpperCase();
-        }
-
-
-        /*
-         * Use last name.
-         *
-         * Lionel Messi -> MESSI
-         * Cristiano Ronaldo -> RONALDO
-         * Kylian Mbappe -> MBAPPE
-         */
-
-        return parts[
-                parts.length - 1
-                ]
-                .toUpperCase();
     }
 
 
     // ==================================================
-    // DP TO PX
+    // CALCULATE AND SAVE RESULT
     // ==================================================
 
-    private int dpToPx(
-            int dp
+    private void calculateAndSaveResult(
+            DataSnapshot playersSnapshot
     ) {
 
+        if (!isHost ||
+                roomRef == null) {
 
-        return Math.round(
 
-                dp
-                        * getResources()
-                        .getDisplayMetrics()
-                        .density
+            resultCalculationStarted = false;
 
+            return;
+        }
+
+
+        String winnerId = null;
+
+        String winnerName = null;
+
+        long highestScore =
+                Long.MIN_VALUE;
+
+
+        Map<String, Long> managerScores =
+                new HashMap<>();
+
+
+        for (DataSnapshot managerSnapshot :
+                playersSnapshot.getChildren()) {
+
+
+            String managerId =
+                    managerSnapshot.getKey();
+
+
+            if (managerId == null) {
+
+
+                continue;
+            }
+
+
+            String managerName =
+                    managerSnapshot
+                            .child(
+                                    "name"
+                            )
+                            .getValue(
+                                    String.class
+                            );
+
+
+            DataSnapshot managerFormation =
+                    managerSnapshot.child(
+                            "formation"
+                    );
+
+
+            long score =
+                    calculateFormationScore(
+                            managerFormation
+                    );
+
+
+            managerScores.put(
+                    managerId,
+                    score
+            );
+
+
+            if (winnerId == null ||
+                    score > highestScore) {
+
+
+                winnerId =
+                        managerId;
+
+
+                winnerName =
+                        managerName;
+
+
+                highestScore =
+                        score;
+            }
+        }
+
+
+        if (winnerId == null) {
+
+
+            resultCalculationStarted = false;
+
+            return;
+        }
+
+
+        Map<String, Object> result =
+                new HashMap<>();
+
+
+        result.put(
+                "completed",
+                true
         );
+
+
+        result.put(
+                "winnerId",
+                winnerId
+        );
+
+
+        result.put(
+                "winnerName",
+                winnerName != null
+
+                        ? winnerName
+
+                        : "Winner"
+        );
+
+
+        result.put(
+                "winningScore",
+                highestScore
+        );
+
+
+        result.put(
+                "completedAt",
+                System.currentTimeMillis()
+        );
+
+
+        result.put(
+                "scores",
+                managerScores
+        );
+
+
+        roomRef
+                .child(
+                        "matchResult"
+                )
+                .setValue(
+                        result
+                )
+
+                .addOnSuccessListener(
+
+                        unused -> {
+
+
+                            if (roomRef == null) {
+
+
+                                return;
+                            }
+
+
+                            Map<String, Object> updates =
+                                    new HashMap<>();
+
+
+                            updates.put(
+                                    "gamePhase",
+                                    "result"
+                            );
+
+
+                            updates.put(
+                                    "allFormationsSubmitted",
+                                    true
+                            );
+
+
+                            updates.put(
+                                    "formationsCompletedAt",
+                                    System.currentTimeMillis()
+                            );
+
+
+                            roomRef.updateChildren(
+                                    updates
+                            );
+                        }
+
+                )
+
+                .addOnFailureListener(
+
+                        error -> {
+
+
+                            resultCalculationStarted = false;
+                        }
+
+                );
     }
 
 
     // ==================================================
-    // TEAM PLAYER MODEL
+    // CALCULATE FORMATION SCORE
     // ==================================================
 
-    private static class TeamPlayer {
+    private long calculateFormationScore(
+            DataSnapshot formationSnapshot
+    ) {
+
+        long score = 0L;
+
+        int goalkeeperCount = 0;
+
+        int defenderCount = 0;
+
+        int midfielderCount = 0;
+
+        int attackerCount = 0;
 
 
-        String id;
+        for (DataSnapshot playerSnapshot :
+                formationSnapshot.getChildren()) {
 
 
-        String name;
+            Long price =
+                    getLongValue(
+                            playerSnapshot.child(
+                                    "price"
+                            )
+                    );
 
 
-        String position;
+            String originalPosition =
+                    normalizePosition(
+
+                            playerSnapshot
+                                    .child(
+                                            "originalPosition"
+                                    )
+                                    .getValue(
+                                            String.class
+                                    )
+
+                    );
 
 
-        String type;
+            String currentPosition =
+                    normalizePosition(
+
+                            playerSnapshot
+                                    .child(
+                                            "position"
+                                    )
+                                    .getValue(
+                                            String.class
+                                    )
+
+                    );
 
 
-        String image;
+            if (price != null) {
+
+
+                score += price;
+            }
+
+
+            // Natural position bonus.
+
+            if (originalPosition.equals(
+                    currentPosition
+            )) {
+
+
+                score += 15L;
+            }
+
+
+            switch (currentPosition) {
+
+
+                case "GK":
+
+
+                    goalkeeperCount++;
+
+                    break;
+
+
+                case "LB":
+
+                case "RB":
+
+                case "CB":
+
+
+                    defenderCount++;
+
+                    break;
+
+
+                case "CDM":
+
+                case "CM":
+
+                case "CAM":
+
+
+                    midfielderCount++;
+
+                    break;
+
+
+                case "LW":
+
+                case "RW":
+
+                case "CF":
+
+                case "ST":
+
+
+                    attackerCount++;
+
+                    break;
+            }
+        }
+
+
+        if (goalkeeperCount == 1) {
+
+
+            score += 40L;
+        }
+
+
+        if (defenderCount >= 3 &&
+                defenderCount <= 5) {
+
+
+            score += 35L;
+        }
+
+
+        if (midfielderCount >= 2 &&
+                midfielderCount <= 5) {
+
+
+            score += 35L;
+        }
+
+
+        if (attackerCount >= 1 &&
+                attackerCount <= 4) {
+
+
+            score += 30L;
+        }
+
+
+        return score;
     }
 
 
     // ==================================================
-    // DESTROY VIEW
+    // NEW:
+    // BOTH DEVICES LISTEN FOR MATCH RESULT
+    // ==================================================
+
+    private void listenToMatchResult() {
+
+        if (roomRef == null) {
+
+
+            return;
+        }
+
+
+        matchResultListener =
+                roomRef
+                        .child(
+                                "matchResult"
+                        )
+                        .addValueEventListener(
+
+                                new ValueEventListener() {
+
+
+                                    @Override
+                                    public void onDataChange(
+                                            @NonNull DataSnapshot snapshot
+                                    ) {
+
+
+                                        Boolean completed =
+                                                snapshot
+                                                        .child(
+                                                                "completed"
+                                                        )
+                                                        .getValue(
+                                                                Boolean.class
+                                                        );
+
+
+                                        if (!Boolean.TRUE.equals(
+                                                completed
+                                        )) {
+
+
+                                            return;
+                                        }
+
+
+                                        String winnerId =
+                                                snapshot
+                                                        .child(
+                                                                "winnerId"
+                                                        )
+                                                        .getValue(
+                                                                String.class
+                                                        );
+
+
+                                        String winnerName =
+                                                snapshot
+                                                        .child(
+                                                                "winnerName"
+                                                        )
+                                                        .getValue(
+                                                                String.class
+                                                        );
+
+
+                                        if (winnerId == null ||
+                                                playerId == null) {
+
+
+                                            return;
+                                        }
+
+
+                                        if (resultShown) {
+
+
+                                            return;
+                                        }
+
+
+                                        Long myScore =
+                                                getLongValue(
+
+                                                        snapshot
+                                                                .child(
+                                                                        "scores"
+                                                                )
+                                                                .child(
+                                                                        playerId
+                                                                )
+
+                                                );
+
+
+                                        boolean didWin =
+                                                playerId.equals(
+                                                        winnerId
+                                                );
+
+
+                                        resultShown = true;
+
+
+                                        showMatchResult(
+                                                didWin,
+                                                winnerName,
+                                                myScore
+                                        );
+                                    }
+
+
+                                    @Override
+                                    public void onCancelled(
+                                            @NonNull DatabaseError error
+                                    ) {
+
+                                    }
+                                }
+                        );
+    }
+
+
+    // ==================================================
+    // SHOW VICTORY / DEFEAT
+    // ==================================================
+
+    private void showMatchResult(
+            boolean didWin,
+            String winnerName,
+            Long myScore
+    ) {
+
+        if (!isAdded()) {
+
+
+            return;
+        }
+
+
+        String title;
+
+        String message;
+
+
+        if (didWin) {
+
+
+            title =
+                    "🏆 VICTORY";
+
+
+            message =
+                    "Congratulations!\n\n"
+                            + "Your squad and formation won the match.";
+
+
+        } else {
+
+
+            title =
+                    "DEFEAT";
+
+
+            message =
+                    "The match is over.\n\n"
+                            + (
+                            winnerName != null
+
+                                    ? winnerName
+                                      + " won the match."
+
+                                    : "Your opponent won the match."
+                    );
+        }
+
+
+        if (myScore != null) {
+
+
+            message +=
+                    "\n\nYour Team Score: "
+                            + myScore;
+        }
+
+
+        new AlertDialog.Builder(
+                requireContext()
+        )
+
+                .setTitle(
+                        title
+                )
+
+                .setMessage(
+                        message
+                )
+
+                .setCancelable(
+                        false
+                )
+
+                .setPositiveButton(
+                        "OK",
+                        (dialog, which) ->
+                                dialog.dismiss()
+                )
+
+                .show();
+    }
+
+
+    // ==================================================
+    // CLEANUP
     // ==================================================
 
     @Override
     public void onDestroyView() {
 
 
-        /*
-         * Make sure ViewPager swipe is restored
-         * if the fragment is destroyed while
-         * a player is being dragged.
-         */
-
-        setViewPagerSwipeEnabled(
-                true
-        );
+        if (formationContainer != null) {
 
 
-        playerBeingDragged =
-                false;
+            disallowParentIntercept(
+                    formationContainer,
+                    false
+            );
+        }
 
 
-        // ==================================================
-        // REMOVE BUDGET LISTENER
-        // ==================================================
+        // Budget listener.
 
         if (myPlayerRef != null &&
                 budgetListener != null) {
 
 
             myPlayerRef
-                    .child("budget")
+                    .child(
+                            "budget"
+                    )
                     .removeEventListener(
                             budgetListener
                     );
         }
 
 
-        // ==================================================
-        // REMOVE TEAM LISTENER
-        // ==================================================
+        // Team listener.
 
         if (teamRef != null &&
                 teamListener != null) {
@@ -2266,9 +3720,7 @@ public class FormationFragment extends Fragment {
         }
 
 
-        // ==================================================
-        // REMOVE FORMATION LISTENER
-        // ==================================================
+        // Formation listener.
 
         if (formationRef != null &&
                 formationListener != null) {
@@ -2280,37 +3732,93 @@ public class FormationFragment extends Fragment {
         }
 
 
-        // ==================================================
-        // CLEAR LOCAL DATA
-        // ==================================================
+        // NEW:
+        // Host submission listener.
 
-        formationPlayerIds.clear();
-
-
-        // ==================================================
-        // CLEAR VIEW REFERENCES
-        // ==================================================
-
-        formationContainer =
-                null;
+        if (roomRef != null &&
+                playersSubmissionListener != null) {
 
 
-        txtFormationBudget =
-                null;
+            roomRef
+                    .child(
+                            "players"
+                    )
+                    .removeEventListener(
+                            playersSubmissionListener
+                    );
+        }
 
 
-        txtFormationPlayerCount =
-                null;
+        // NEW:
+        // Match result listener.
+
+        if (roomRef != null &&
+                matchResultListener != null) {
 
 
-        txtEmptyFormation =
-                null;
+            roomRef
+                    .child(
+                            "matchResult"
+                    )
+                    .removeEventListener(
+                            matchResultListener
+                    );
+        }
 
 
-        btnAddFormationPlayer =
-                null;
+        formationPlayerViews.clear();
+
+
+        formationContainer = null;
+
+        txtFormationTitle = null;
+
+        txtFormationBudget = null;
+
+        txtFormationPlayerCount = null;
+
+        txtEmptyFormation = null;
+
+        btnAddFormationPlayer = null;
+
+        btnSubmitFormation = null;
 
 
         super.onDestroyView();
+    }
+
+
+    // ==================================================
+    // FORMATION PLAYER MODEL
+    // ==================================================
+
+    private static class FormationPlayer {
+
+
+        String id;
+
+
+        String name;
+
+
+        String originalPosition;
+
+
+        String currentPosition;
+
+
+        String type;
+
+
+        String image;
+
+
+        long price;
+
+
+        float x = -1f;
+
+
+        float y = -1f;
     }
 }

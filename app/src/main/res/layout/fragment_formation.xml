@@ -5,7 +5,10 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
-    <!-- BACKGROUND -->
+    <!-- ==================================================
+         BACKGROUND
+         ================================================== -->
+
     <ImageView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -13,13 +16,21 @@
         android:scaleType="centerCrop"
         android:contentDescription="@null" />
 
-    <!-- DARK OVERLAY -->
+
+    <!-- ==================================================
+         DARK OVERLAY
+         ================================================== -->
+
     <View
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:background="#B5000000" />
 
-    <!-- MAIN CONTENT -->
+
+    <!-- ==================================================
+         MAIN CONTENT
+         ================================================== -->
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
@@ -28,9 +39,13 @@
         android:paddingStart="18dp"
         android:paddingEnd="18dp"
         android:paddingTop="45dp"
-        android:paddingBottom="20dp">
+        android:paddingBottom="16dp">
 
-        <!-- SMALL TITLE -->
+
+        <!-- ==================================================
+             SMALL TITLE
+             ================================================== -->
+
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
@@ -40,7 +55,11 @@
             android:fontFamily="@font/bebas_neue"
             android:letterSpacing="0.15" />
 
-        <!-- MAIN TITLE -->
+
+        <!-- ==================================================
+             MAIN TITLE
+             ================================================== -->
+
         <TextView
             android:id="@+id/txtFormationTitle"
             android:layout_width="wrap_content"
@@ -52,27 +71,38 @@
             android:fontFamily="@font/bebas_neue"
             android:letterSpacing="0.06" />
 
-        <!-- GOLD LINE -->
+
+        <!-- ==================================================
+             GOLD LINE
+             ================================================== -->
+
         <View
             android:layout_width="55dp"
             android:layout_height="3dp"
             android:layout_marginTop="3dp"
             android:background="#D4AF37" />
 
-        <!-- TEAM INFO -->
+
+        <!-- ==================================================
+             TEAM INFO
+             ================================================== -->
+
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="60dp"
-            android:layout_marginTop="12dp"
+            android:layout_marginTop="10dp"
             android:orientation="horizontal">
 
+
             <!-- BUDGET -->
+
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:gravity="center">
+
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -82,6 +112,7 @@
                     android:textSize="11sp"
                     android:fontFamily="@font/bebas_neue"
                     android:letterSpacing="0.12" />
+
 
                 <TextView
                     android:id="@+id/txtFormationBudget"
@@ -95,20 +126,25 @@
 
             </LinearLayout>
 
+
             <!-- DIVIDER -->
+
             <View
                 android:layout_width="1dp"
                 android:layout_height="35dp"
                 android:layout_gravity="center_vertical"
                 android:background="#44FFFFFF" />
 
+
             <!-- PLAYER COUNT -->
+
             <LinearLayout
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1"
                 android:orientation="vertical"
                 android:gravity="center">
+
 
                 <TextView
                     android:layout_width="wrap_content"
@@ -118,6 +154,7 @@
                     android:textSize="11sp"
                     android:fontFamily="@font/bebas_neue"
                     android:letterSpacing="0.12" />
+
 
                 <TextView
                     android:id="@+id/txtFormationPlayerCount"
@@ -133,17 +170,23 @@
 
         </LinearLayout>
 
-        <!-- FOOTBALL FIELD -->
+
+        <!-- ==================================================
+             FOOTBALL FIELD
+             ================================================== -->
+
         <FrameLayout
             android:id="@+id/formationContainer"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="6dp"
             android:clipChildren="true"
             android:clipToPadding="true">
 
+
             <!-- FIELD PNG -->
+
             <ImageView
                 android:id="@+id/imgFootballField"
                 android:layout_width="match_parent"
@@ -152,12 +195,11 @@
                 android:scaleType="fitXY"
                 android:contentDescription="@null" />
 
-            <!--
-                Player views will be added dynamically
-                on top of this field by FormationFragment.java.
-            -->
 
-            <!-- EMPTY MESSAGE -->
+            <!-- ==================================================
+                 EMPTY FORMATION MESSAGE
+                 ================================================== -->
+
             <TextView
                 android:id="@+id/txtEmptyFormation"
                 android:layout_width="match_parent"
@@ -176,42 +218,102 @@
 
         </FrameLayout>
 
-        <!-- ADD PLAYER -->
+
+        <!-- ==================================================
+             ACTION BUTTONS
+             ================================================== -->
+
         <LinearLayout
-            android:id="@+id/btnAddFormationPlayer"
             android:layout_width="match_parent"
             android:layout_height="58dp"
-            android:layout_marginTop="12dp"
-            android:orientation="horizontal"
-            android:gravity="center"
-            android:background="@drawable/menu_card"
-            android:clickable="true"
-            android:focusable="true"
-            android:elevation="8dp">
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
 
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="+  ADD PLAYER"
-                android:textColor="#FFFFFF"
-                android:textSize="23sp"
-                android:textStyle="bold"
-                android:fontFamily="@font/bebas_neue"
-                android:letterSpacing="0.08" />
+
+            <!-- ==================================================
+                 ADD PLAYER
+                 ================================================== -->
+
+            <LinearLayout
+                android:id="@+id/btnAddFormationPlayer"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/menu_card"
+                android:clickable="true"
+                android:focusable="true"
+                android:elevation="6dp">
+
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="+  ADD PLAYER"
+                    android:textColor="#FFFFFF"
+                    android:textSize="18sp"
+                    android:textStyle="bold"
+                    android:fontFamily="@font/bebas_neue"
+                    android:letterSpacing="0.06" />
+
+            </LinearLayout>
+
+
+            <!-- SPACE -->
+
+            <Space
+                android:layout_width="10dp"
+                android:layout_height="match_parent" />
+
+
+            <!-- ==================================================
+                 SUBMIT FORMATION
+                 ================================================== -->
+
+            <LinearLayout
+                android:id="@+id/btnSubmitFormation"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:orientation="horizontal"
+                android:gravity="center"
+                android:background="@drawable/lobby_start_button"
+                android:clickable="true"
+                android:focusable="true"
+                android:elevation="8dp">
+
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="SUBMIT"
+                    android:textColor="#111111"
+                    android:textSize="20sp"
+                    android:textStyle="bold"
+                    android:fontFamily="@font/bebas_neue"
+                    android:letterSpacing="0.08" />
+
+            </LinearLayout>
 
         </LinearLayout>
 
-        <!-- DRAG HINT -->
+
+        <!-- ==================================================
+             DRAG HINT
+             ================================================== -->
+
         <TextView
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="7dp"
             android:gravity="center"
-            android:text="HOLD AND DRAG PLAYERS TO BUILD YOUR FORMATION"
+            android:text="HOLD AND DRAG PLAYERS • SUBMIT WHEN YOUR XI IS READY"
             android:textColor="#77FFFFFF"
-            android:textSize="11sp"
+            android:textSize="10sp"
             android:fontFamily="@font/bebas_neue"
-            android:letterSpacing="0.06" />
+            android:letterSpacing="0.04" />
+
 
     </LinearLayout>
 
